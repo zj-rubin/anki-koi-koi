@@ -43,7 +43,7 @@ As of this file being written, the add-on has not been uploaded to AnkiWeb. Howe
 
 
 
-1. Download `hanafuda\_koi\_koi.ankiaddon` from the [GitHub Releases page](https://github.com/zjrubin/hanafuda-koi-koi-anki/releases)
+1. Download `hanafuda\_koi\_koi.ankiaddon` from the [GitHub repo page](https://github.com/zj-rubin/anki-koi-koi)
 2. Open Anki
 3. Go to **Tools → Add-ons → Install from file**
 4. Select the downloaded `.ankiaddon` file
