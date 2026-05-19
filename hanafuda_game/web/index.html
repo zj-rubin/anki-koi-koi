@@ -1,0 +1,2411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>花札 Koi-Koi</title>
+<script src="qwebchannel.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0d1117;--ink:#070c13;--surface:#141c26;--surface2:#1a2535;--surface3:#1f2d40;
+  --border:rgba(100,160,220,0.14);--border2:rgba(100,160,220,0.3);
+  --text:#eef4ff;--text2:#90b8d8;--text3:#4a70a0;
+  --accent:#5aaee0;--accent2:#2a6fa0;
+  --gold:#d4b84a;--green:#3aaa6a;--red:#d05050;
+  --radius:6px;
+  --card-w:76px;--card-h:110px;
+  --mini-w:36px;--mini-h:52px;
+  --cap-w:46px;--cap-h:66px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Noto Serif JP','Segoe UI',serif;font-size:13px;min-height:100vh;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(var(--grid-line-rgb,100,160,220),0.012) 40px,rgba(var(--grid-line-rgb,100,160,220),0.012) 41px);}
+#app{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh;padding:8px 12px;gap:5px;max-width:900px;margin:0 auto;width:100%;}
+
+.header-row{display:flex;align-items:center;gap:8px;flex-shrink:0;position:sticky;top:0;z-index:50;background:var(--bg);padding:4px 0;margin:-4px 0 0;}
+.game-title{font-size:15px;font-weight:600;color:var(--accent);letter-spacing:0.15em;white-space:nowrap;}
+.game-title span{color:var(--gold);margin-right:5px;}
+.hctl{display:flex;gap:4px;align-items:center;flex-wrap:nowrap;}
+label{font-size:10px;color:var(--text3);white-space:nowrap;}
+select,input[type=range]{background:var(--surface2);border:0.5px solid var(--border2);border-radius:4px;color:var(--text);font-size:10px;padding:2px 4px;}
+input[type=range]{width:55px;accent-color:var(--accent);}
+.hval{font-size:10px;color:var(--text2);min-width:22px;}
+#phase-label{font-size:10px;color:var(--text3);margin-left:auto;white-space:nowrap;}
+
+/* Score boxes — fixed height so captured cards don't push layout */
+.score-box{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:5px 10px;position:relative;width:100%;}
+.score-box::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--border2);transition:background 0.3s;}
+.score-box.active::before{background:var(--accent);}
+.score-top{display:flex;align-items:baseline;gap:8px;}
+.sname{font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;}
+.pts{font-size:16px;font-weight:600;color:var(--accent);}
+.pts-label{font-size:9px;color:var(--text3);margin-left:2px;}
+/* Captured scroll horizontally, fixed height */
+.cap-scroll{display:flex;gap:5px;overflow-x:auto;overflow-y:visible;margin-top:4px;padding-bottom:4px;flex-wrap:nowrap;}
+.cap-scroll::-webkit-scrollbar{height:3px;}
+.cap-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.cap-group{display:flex;flex-direction:column;gap:2px;flex-shrink:0;}
+.cap-group-label{font-size:10px;color:var(--text2);text-align:center;white-space:nowrap;margin-bottom:2px;}
+.cap-cards{display:flex;gap:2px;}
+.mini{border-radius:3px;overflow:hidden;border:0.5px solid var(--border);background:var(--surface2);flex-shrink:0;}
+.mini img{width:100%;height:100%;object-fit:cover;display:block;}
+.mini.sz-cpu{width:var(--mini-w);height:var(--mini-h);}
+.mini.sz-p1{width:var(--cap-w);height:var(--cap-h);}
+
+#log{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:5px 11px;font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;}
+
+.area-label{display:flex;align-items:baseline;gap:5px;font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px;}
+.area-label-jp{font-size:11px;opacity:0.7;}
+.field-wrap{flex-shrink:0;}
+#field{display:grid;grid-template-columns:repeat(8,var(--card-w));gap:5px;justify-content:center;padding:6px 8px;background:var(--surface);border-radius:var(--radius);border:0.5px solid var(--border);min-height:calc(var(--card-h) + 14px);}
+#field.drag-over{border-color:var(--accent);background:rgba(74,159,212,0.06);}
+.hand-wrap{flex-shrink:0;}
+#p1-hand{display:flex;flex-wrap:wrap;justify-content:center;gap:5px;padding:6px 8px;background:var(--surface);border-radius:var(--radius);border:0.5px solid var(--border);min-height:calc(var(--card-h) + 14px);}
+
+.card{width:var(--card-w);height:var(--card-h);border-radius:6px;cursor:pointer;border:1px solid rgba(100,160,220,0.18);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;position:relative;transition:transform 0.12s,box-shadow 0.12s,filter 0.2s;user-select:none;flex-shrink:0;overflow:hidden;background:var(--surface2);}
+.card img.front-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:5px;}
+.card-label{position:relative;z-index:2;width:100%;background:linear-gradient(transparent,rgba(0,0,0,0.88) 35%);padding:14px 3px 3px;text-align:center;}
+.card-label-jp{display:block;font-size:10px;color:rgba(255,255,255,0.95);line-height:1.2;font-weight:600;}
+.card-label-en{display:block;font-size:7px;color:rgba(255,255,255,0.55);line-height:1.3;}
+.card-type-pip{position:absolute;top:4px;right:4px;z-index:3;width:7px;height:7px;border-radius:50%;}
+.card:hover:not(.back):not(.no-match){transform:translateY(-7px);box-shadow:0 10px 22px rgba(0,0,0,0.55);}
+.card.selected{transform:translateY(-14px)!important;box-shadow:0 0 0 2px var(--accent),0 14px 28px rgba(0,0,0,0.65)!important;filter:none!important;}
+.card.match-hint{box-shadow:0 0 0 2px var(--green),0 6px 16px rgba(0,0,0,0.4);animation:pg 0.9s infinite alternate;}
+@keyframes pg{from{box-shadow:0 0 0 2px #3aaa6a,0 6px 14px rgba(0,0,0,0.4);}to{box-shadow:0 0 0 2px #60d090,0 6px 20px rgba(50,200,100,0.18);}}
+.card.no-match{filter:brightness(0.45);cursor:default;}
+.card.deck-drawn{box-shadow:0 0 0 2px var(--gold);}
+.card-emoji{font-size:24px;position:relative;z-index:1;}
+.card.back{cursor:default;background:var(--ink);}
+.card.back .back-svg{position:absolute;inset:0;width:100%;height:100%;}
+.card.back:hover{transform:none;box-shadow:none;}
+@keyframes deckslide{0%{opacity:0;transform:translateY(-24px) scale(0.88);}60%{opacity:1;transform:translateY(3px) scale(1.03);}100%{opacity:1;transform:translateY(0) scale(1);}}
+@keyframes cardflip{0%{transform:rotateY(90deg) scale(0.9);opacity:0;}50%{transform:rotateY(-10deg) scale(1.03);}100%{transform:rotateY(0deg) scale(1);opacity:1;}}
+.card.anim-flip{animation:cardflip 0.35s ease forwards;}
+.card.anim-draw{animation:deckslide 0.45s ease forwards;}
+
+.btn-row{display:flex;gap:7px;flex-shrink:0;align-items:center;justify-content:center;}
+button{padding:6px 14px;border-radius:var(--radius);border:0.5px solid var(--border2);background:var(--surface);color:var(--text);font-family:inherit;font-size:12px;cursor:pointer;transition:background 0.15s,border-color 0.15s,box-shadow 0.15s;letter-spacing:0.03em;}
+button:hover:not(:disabled){background:var(--surface3);border-color:var(--accent);}
+button:disabled{opacity:0.3;cursor:default;}
+/* New Game — muted during game, blue when game over, always hoverable */
+#btn-new{background:var(--surface2);color:var(--text2);border-color:var(--border2);}
+#btn-new:hover{background:var(--surface3);border-color:var(--accent);color:var(--text);}
+#btn-new.game-over{background:var(--accent2);color:#d8f0ff;border-color:var(--accent);font-weight:600;}
+#btn-new.game-over:hover{background:var(--accent);}
+button.koi{background:var(--koi-bg,#1a1a3a);color:var(--koi-text,#c8a8ff);border-color:var(--koi-border,#6040b0);}
+button.koi:hover:not(:disabled){background:var(--koi-hover,#26265a);border-color:var(--koi-border-hover,#9060d0);}
+/* Stop button pulses red when yaku available */
+#btn-stop{transition:background 0.15s,border-color 0.15s,box-shadow 0.3s;}
+#btn-stop.yaku-ready{animation:stop-pulse 1s infinite alternate;border-color:var(--red);color:#ffaaaa;}
+@keyframes stop-pulse{from{box-shadow:0 0 0 0 rgba(208,80,80,0);}to{box-shadow:0 0 8px 3px rgba(208,80,80,0.5);}}
+
+.yaku-section{flex-shrink:0;padding-bottom:12px;}
+.yaku-title{font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px;display:flex;align-items:center;gap:5px;}
+.yaku-title::after{content:'';flex:1;height:0.5px;background:var(--border);}
+.yaku-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:3px;}
+.yaku-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:4px 7px;transition:border-color 0.25s,background 0.25s,box-shadow 0.25s;}
+.yaku-card.earned{background:rgba(20,60,110,0.65);border-color:var(--accent);box-shadow:0 0 10px rgba(90,174,224,0.2);}
+.yaku-name{font-size:10px;color:var(--text2);display:block;}
+.yaku-card.earned .yaku-name{color:var(--accent);font-weight:600;}
+.yaku-jp{font-size:8px;color:var(--text3);display:block;}
+.yaku-pts{font-size:8px;color:var(--text3);display:block;margin-top:1px;}
+.yaku-card.earned .yaku-pts{color:var(--gold);}
+
+/* Overlays */
+.overlay{position:fixed;inset:0;background:rgba(0,8,18,0.88);display:flex;align-items:center;justify-content:center;z-index:200;}
+.overlay.hidden{display:none;}
+.obox{background:var(--surface);border:1px solid var(--accent2);border-radius:10px;padding:24px 30px;max-width:440px;width:92%;box-shadow:0 0 60px rgba(42,111,160,0.3);}
+.obox h2{font-size:18px;margin-bottom:8px;color:var(--accent);letter-spacing:0.06em;text-align:center;}
+.obox p{color:var(--text2);font-size:13px;line-height:1.7;white-space:pre-line;text-align:center;margin-bottom:16px;}
+.eyebrow{font-size:10px;color:var(--text3);letter-spacing:0.14em;text-transform:uppercase;text-align:center;margin-bottom:12px;}
+.ch-q{font-size:26px;margin-bottom:16px;text-align:center;color:var(--text);min-height:40px;line-height:1.3;}
+.choices{display:flex;flex-direction:column;gap:7px;width:100%;}
+.choice-btn{padding:10px 14px;border-radius:var(--radius);text-align:left;background:var(--surface2);border:0.5px solid var(--border2);color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;transition:background 0.1s;width:100%;}
+.choice-btn:hover{background:var(--surface3);border-color:var(--accent);}
+.choice-btn.correct{background:rgba(30,90,55,0.85);border-color:var(--green);color:#80e0a0;}
+.choice-btn.wrong{background:rgba(70,20,20,0.85);border-color:var(--red);color:#e09090;}
+.ch-stake{font-size:11px;color:var(--text3);text-align:center;margin-top:10px;}
+
+.oya-cards{display:flex;gap:24px;justify-content:center;margin:16px 0;}
+.oya-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.oya-wrap .olabel{font-size:11px;color:var(--text3);}
+.oya-wrap .card{width:80px;height:116px;cursor:pointer;}
+#oya-result{min-height:22px;color:var(--gold);font-size:14px;text-align:center;margin-bottom:10px;}
+
+/* Floating banner: koi-koi, stop, yaku earned */
+@keyframes banner-in{0%{opacity:0;transform:scale(0.5);}40%{opacity:1;transform:scale(1.15);}70%{transform:scale(0.95);}100%{opacity:1;transform:scale(1);}}
+@keyframes banner-out{to{opacity:0;transform:scale(0.8) translateY(-20px);}}
+.banner{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:400;}
+.banner.hidden{display:none;}
+.banner-inner{padding:18px 36px;border-radius:12px;font-size:28px;font-weight:600;letter-spacing:0.1em;text-align:center;animation:banner-in 0.55s ease forwards;}
+.banner-inner .ban-sub{font-size:14px;font-weight:400;opacity:0.8;display:block;margin-top:4px;}
+/* ── Settings panel ── */
+.settings-panel{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:7px 12px;flex-shrink:0;}
+.settings-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+.setting-group{display:flex;align-items:center;gap:6px;}
+.setting-label{font-size:10px;color:var(--text3);white-space:nowrap;}
+.seg-ctrl{display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden;}
+.seg-btn{padding:3px 9px;font-size:11px;background:transparent;border:none;color:var(--text3);cursor:pointer;transition:background 0.1s,color 0.1s;font-family:inherit;}
+.seg-btn:hover{background:var(--surface3);color:var(--text);}
+.seg-btn.active{background:var(--accent2);color:#d8f0ff;}
+.toggle-wrap{display:flex;align-items:center;gap:5px;cursor:pointer;}
+.toggle-wrap input[type=checkbox]{appearance:none;width:28px;height:16px;border-radius:8px;background:var(--surface3);border:0.5px solid var(--border2);cursor:pointer;position:relative;transition:background 0.2s;}
+.toggle-wrap input[type=checkbox]::after{content:'';position:absolute;width:11px;height:11px;border-radius:50%;background:var(--text3);top:2px;left:2px;transition:left 0.2s,background 0.2s;}
+.toggle-wrap input[type=checkbox]:checked{background:var(--accent2);border-color:var(--accent);}
+.toggle-wrap input[type=checkbox]:checked::after{left:14px;background:#d8f0ff;}
+.toggle-wrap.locked{opacity:0.4;pointer-events:none;}
+.toggle-label{font-size:10px;color:var(--text3);}
+.sep{width:0.5px;height:18px;background:var(--border);flex-shrink:0;}
+
+/* ── Hint button in challenge overlay ── */
+.hint-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+#btn-hint{padding:4px 12px;font-size:11px;background:var(--surface2);border:0.5px solid var(--gold);color:var(--gold);border-radius:var(--radius);cursor:pointer;}
+#btn-hint:hover{background:rgba(212,184,74,0.1);}
+#btn-hint:disabled{opacity:0.3;cursor:default;}
+#hint-count{font-size:10px;color:var(--text3);}
+
+/* ── Show choices button ── */
+#btn-show-choices{padding:8px 20px;font-size:13px;background:var(--surface2);border:0.5px solid var(--border2);color:var(--text2);border-radius:var(--radius);cursor:pointer;margin:10px auto;display:block;width:100%;transition:background 0.1s;}
+#btn-show-choices:hover{background:var(--surface3);border-color:var(--accent);}
+
+/* ── Duel overlay ── */
+.duel-cards{display:flex;gap:24px;justify-content:center;margin:16px 0;}
+.duel-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.duel-wrap .dlabel{font-size:11px;color:var(--text3);}
+.duel-wrap .card{width:80px;height:116px;}
+#duel-result{min-height:22px;color:var(--gold);font-size:14px;text-align:center;margin:8px 0;}
+
+#koi-banner .banner-inner{background:rgba(70,30,130,0.94);color:#e0c8ff;border:1px solid #9060d0;box-shadow:0 0 60px rgba(130,70,220,0.5);}
+#stop-banner .banner-inner{background:rgba(130,30,30,0.94);color:#ffc8c8;border:1px solid #d05050;box-shadow:0 0 60px rgba(208,80,80,0.5);}
+#yaku-banner .banner-inner{background:rgba(20,70,120,0.96);color:#c8e8ff;border:1px solid var(--accent);box-shadow:0 0 60px rgba(90,174,224,0.4);}
+
+/* ── Appearance themes ── */
+body.theme-nara{--ease-easy-color:#C07A20;--ease-easy-rgb:192,122,32;--ease-hard-color:#c06878;--ease-hard-rgb:192,104,120;
+  --koi-bg:#2a1f0a;--koi-text:#F7BB7D;--koi-border:#FAA945;--koi-hover:#3a2a10;--koi-border-hover:#FFD080;--grid-line-rgb:250,169,69;
+  --bg:#171412;--ink:#0D0B09;--surface:#181B26;--surface2:#1F2330;--surface3:#252840;
+  --border:rgba(250,169,69,0.18);--border2:rgba(250,169,69,0.40);
+  --text:#F7BB7D;--text2:#C9924A;--text3:#7A5830;
+  --accent:#FAA945;--accent2:#C07A20;
+  --gold:#D9B611;--green:#3aaa6a;--red:#d05050;
+}
+body.theme-nara .card.back .back-svg rect:first-child{fill:#0D0B09;}
+body.theme-nara .banner-inner{color:#171412;}
+
+body.theme-hirosaki{--ease-easy-color:#2a6a30;--ease-easy-rgb:42,106,48;--ease-hard-color:#a02020;--ease-hard-rgb:160,32,32;
+  --koi-bg:#f5d8e0;--koi-text:#801028;--koi-border:#c91f37;--koi-hover:#e8c0cc;--koi-border-hover:#a01828;--grid-line-rgb:201,31,55;
+  --bg:#FCC9B9;--ink:#60281E;--surface:#F08F90;--surface2:#F5A8A0;--surface3:#E87878;
+  --border:rgba(201,31,55,0.18);--border2:rgba(201,31,55,0.38);
+  --text:#8F1D21;--text2:#A03030;--text3:#C05050;
+  --accent:#C91F37;--accent2:#A01828;
+  --gold:#FF3500;--green:#2a6a30;--red:#8a1010;
+}
+body.theme-hirosaki .score-box::before{background:var(--border2);}
+body.theme-hirosaki .card{border-color:rgba(201,31,55,0.2);}
+body.theme-hirosaki .seg-btn.active{color:#fff;}
+body.theme-hirosaki #btn-stop.yaku-ready{color:#8a1010;}
+body.theme-hirosaki .banner-inner{color:#fff;}
+body.theme-hirosaki .card.back .back-svg rect:first-child{fill:#60281E;}
+body.theme-hirosaki #log{color:var(--text2);}
+
+/* ── Fukuoka theme ── */
+body.theme-fukuoka{--ease-easy-color:#EBF6F7;--ease-easy-rgb:235,246,247;--ease-hard-color:#78779B;--ease-hard-rgb:120,119,155;
+  --bg:#1B294B;--ink:#001840;--surface:#006C7F;--surface2:#2a5060;--surface3:#48929B;
+  --border:rgba(72,146,155,0.22);--border2:rgba(72,146,155,0.45);
+  --text:#EBF6F7;--text2:#86ABA5;--text3:#48929B;
+  --accent:#78779B;--accent2:#48929B;
+  --gold:#a0cfd4;--green:#3aaa6a;--red:#d05050;
+  --koi-bg:#0a1830;--koi-text:#86ABA5;--koi-border:#78779B;--koi-hover:#142240;--koi-border-hover:#a0a0cc;
+  --grid-line-rgb:120,119,155;
+}
+body.theme-fukuoka .toggle-label{color:#EBF6F7;}
+body.theme-fukuoka .hval{color:#EBF6F7;}
+body.theme-fukuoka label{color:#86ABA5;}
+body.theme-fukuoka .hctl label{color:#86ABA5;}
+body.theme-fukuoka .oya-setting-label{color:#EBF6F7;}
+body.theme-fukuoka .oya-settings-title{color:#86ABA5;}
+body.theme-fukuoka .tb-desc{color:#86ABA5;}
+body.theme-fukuoka .tb-name{color:#EBF6F7;}
+body.theme-fukuoka .theme-btn{color:#EBF6F7;}
+body.theme-fukuoka .seg-btn{color:#86ABA5;}
+body.theme-fukuoka .seg-btn.active{color:#EBF6F7;}
+body.theme-fukuoka .toggle-wrap input[type=checkbox]{background:var(--surface2);}
+body.theme-fukuoka .ap-title{color:#78779B;}
+body.theme-fukuoka .yaku-panel-title{color:#78779B;}
+
+/* ── Junihitoe theme — layered court robes, lively ── */
+body.theme-kyoto{--ease-easy-color:#8DB255;--ease-easy-rgb:141,178,85;--ease-hard-color:#DC3023;--ease-hard-rgb:220,48,35;
+  --bg:#28102e;--ink:#1a0820;--surface:#4a6830;--surface2:#3d5828;--surface3:#5a7838;
+  --border:rgba(226,177,60,0.25);--border2:rgba(226,177,60,0.52);
+  --text:#FCC9B9;--text2:#E2B13C;--text3:#8DB255;
+  --accent:#E2B13C;--accent2:#b88a28;
+  --gold:#E2B13C;--green:#8DB255;--red:#DC3023;
+  --koi-bg:#1a0820;--koi-text:#FCC9B9;--koi-border:#DC3023;--koi-hover:#28102e;--koi-border-hover:#f04030;
+  --grid-line-rgb:226,177,60;
+}
+body.theme-kyoto .banner-inner{color:#1a0820;}
+body.theme-kyoto .seg-btn.active{color:#1a0820;}
+body.theme-kyoto .card.back .back-svg rect:first-child{fill:#1a0820;}
+/* Yaku boxes — layered robe colours */
+body.theme-kyoto .yaku-card{background:#3d5828;border-color:rgba(226,177,60,0.2);}
+body.theme-kyoto .yaku-name{color:#FCC9B9;}
+body.theme-kyoto .yaku-jp{color:#E2B13C;}
+body.theme-kyoto .yaku-pts{color:#8DB255;}
+body.theme-kyoto .yaku-card.earned{background:#5a3a70;border-color:#DC3023;box-shadow:0 0 10px rgba(220,48,35,0.25);}
+body.theme-kyoto .yaku-card.earned .yaku-name{color:#FCC9B9;font-weight:700;}
+body.theme-kyoto .yaku-card.earned .yaku-jp{color:#E2B13C;}
+body.theme-kyoto .yaku-card.earned .yaku-pts{color:#F47983;}
+body.theme-kyoto .yaku-title{color:#F47983;}
+/* Score boxes */
+body.theme-kyoto .sname{color:#F47983;}
+body.theme-kyoto .pts{color:#E2B13C;}
+body.theme-kyoto .pts-label{color:#8DB255;}
+body.theme-kyoto .cap-group-label{color:#F47983;}
+/* Log */
+body.theme-kyoto #log{color:#FCC9B9;}
+/* Area labels */
+body.theme-kyoto .area-label{color:#F47983;}
+/* Phase label */
+body.theme-kyoto #phase-label{color:#8DB255;}
+/* ── Sapporo theme — Hokkaido night and snow ── */
+body.theme-sapporo{--ease-easy-color:#EBF6F7;--ease-easy-rgb:235,246,247;--ease-hard-color:#C6C2B6;--ease-hard-rgb:198,194,182;
+  --bg:#07080d;--ink:#0e1018;--surface:#C6C2B6;--surface2:#dedad4;--surface3:#EBF6F7;
+  --border:rgba(143,207,234,0.22);--border2:rgba(143,207,234,0.55);
+  --text:#181B26;--text2:#2B3736;--text3:#8FCFEA;
+  --accent:#8FCFEA;--accent2:#5D8CAE;
+  --gold:#78779B;--green:#2a6a50;--red:#8a2020;
+  --koi-bg:#003171;--koi-text:#EBF6F7;--koi-border:#8FCFEA;--koi-hover:#00408a;--koi-border-hover:#EBF6F7;
+  --grid-line-rgb:143,207,234;
+  /* Overlay/popup vars — keep dark with light text */
+  --overlay-surface:#181B26;--overlay-border:rgba(93,140,174,0.5);--overlay-text:#EBF6F7;--overlay-text2:#C6C2B6;
+}
+body.theme-sapporo .area-label{color:#8FCFEA;}
+body.theme-sapporo .toggle-label{color:#C6C2B6;}
+body.theme-sapporo .hval{color:#C6C2B6;}
+body.theme-sapporo label{color:#C6C2B6;}
+body.theme-sapporo .hctl label{color:#C6C2B6;}
+body.theme-sapporo .oya-setting-label{color:#C6C2B6;}
+body.theme-sapporo .oya-settings-title{color:#78779B;}
+body.theme-sapporo .setting-label{color:#C6C2B6;}
+body.theme-sapporo #log{color:#2B3736;}
+body.theme-sapporo .seg-btn.active{color:#EBF6F7;}
+body.theme-sapporo .banner-inner{color:#EBF6F7;}
+body.theme-sapporo .card.back .back-svg rect:first-child{fill:#181B26;}
+body.theme-sapporo .sname{color:#2B3736;}
+body.theme-sapporo .pts{color:#2B3736;}
+body.theme-sapporo .pts-label{color:#78779B;}
+body.theme-sapporo .yaku-card{color:#181B26;}
+body.theme-sapporo .yaku-name{color:#2B3736;}
+body.theme-sapporo .yaku-jp{color:#78779B;}
+body.theme-sapporo .yaku-pts{color:#2B3736;}
+body.theme-sapporo .yaku-card.earned{background:#5D8CAE;border-color:#5D8CAE;box-shadow:none;}
+body.theme-sapporo .yaku-card.earned .yaku-name{color:#EBF6F7;font-weight:700;}
+body.theme-sapporo .yaku-card.earned .yaku-jp{color:#C6C2B6;}
+body.theme-sapporo .yaku-card.earned .yaku-pts{color:#EBF6F7;}
+body.theme-sapporo .score-box::before{background:#8FCFEA;}
+body.theme-sapporo #btn-new:not(.game-over){background:#181B26;color:#8FCFEA;border-color:#5D8CAE;}
+body.theme-sapporo #btn-new:not(.game-over):hover{background:#0e1018;border-color:#8FCFEA;color:#EBF6F7;}
+body.theme-sapporo #btn-stop.yaku-ready{animation:stop-pulse-sapporo 1s infinite alternate;border-color:#8FCFEA;color:#003171;background:#EBF6F7;}
+@keyframes stop-pulse-sapporo{from{box-shadow:0 0 0 0 rgba(0,49,113,0);}to{box-shadow:0 0 8px 3px rgba(0,49,113,0.5);}}
+/* Overlays stay dark */
+body.theme-sapporo .obox{background:#181B26;border-color:rgba(143,207,234,0.5);}
+body.theme-sapporo .obox h2{color:#8FCFEA;}
+body.theme-sapporo .obox p{color:#C6C2B6;}
+body.theme-sapporo .overlay-box{background:#181B26;}
+body.theme-sapporo #yaku-panel,body.theme-sapporo #appearance-panel{background:#181B26;border-color:rgba(143,207,234,0.4);}
+body.theme-sapporo .yaku-panel-header,body.theme-sapporo .ap-header{background:#181B26;}
+body.theme-sapporo .yaku-ref-item{background:#2B2028;border-color:rgba(93,140,174,0.2);}
+body.theme-sapporo .yaku-ref-name{color:#EBF6F7;}
+body.theme-sapporo .yaku-ref-desc{color:#C6C2B6;}
+body.theme-sapporo .yaku-ref-cards{color:#78779B;}
+body.theme-sapporo .yaku-section-title{color:#78779B;border-color:rgba(93,140,174,0.2);}
+body.theme-sapporo .choice-btn{background:#2B2028;color:#EBF6F7;border-color:rgba(93,140,174,0.3);}
+body.theme-sapporo .choice-btn:hover{background:#2B3736;}
+body.theme-sapporo .choice-btn.correct{background:rgba(20,80,50,0.95);border-color:#3aaa6a;color:#80e0a0;}
+body.theme-sapporo .choice-btn.wrong{background:rgba(80,20,20,0.95);border-color:#d05050;color:#e09090;}
+body.theme-sapporo .oya-settings{border-color:rgba(93,140,174,0.2);}
+body.theme-sapporo .oya-setting-label{color:#C6C2B6;}
+body.theme-sapporo .theme-btn{background:#2B2028;color:#EBF6F7;border-color:rgba(93,140,174,0.25);}
+body.theme-sapporo .theme-btn.active{border-color:#5D8CAE;background:#2B3736;}
+body.theme-sapporo .seg-btn{color:#C6C2B6;}
+body.theme-sapporo .eyebrow{color:#78779B;}
+body.theme-sapporo .ch-q{color:#EBF6F7;}
+body.theme-sapporo .ch-stake{color:#78779B;}
+/* Config panel in Sapporo — dark bg, light text */
+body.theme-sapporo #config-panel{background:#181B26;border-color:rgba(143,207,234,0.4);}
+body.theme-sapporo .cp-header{background:#181B26;}
+body.theme-sapporo .cp-title{color:#8FCFEA;}
+body.theme-sapporo #btn-close-config{color:#C6C2B6;border-color:rgba(143,207,234,0.3);}
+body.theme-sapporo .cp-section-title{color:#78779B;border-color:rgba(143,207,234,0.2);}
+body.theme-sapporo .cp-note{background:#2B2028;color:#C6C2B6;}
+body.theme-sapporo .cp-label{color:#C6C2B6;}
+body.theme-sapporo #cp-pool-label{color:#EBF6F7!important;}
+body.theme-sapporo .cp-select{background:#2B2028;color:#EBF6F7;border-color:rgba(143,207,234,0.3);}
+body.theme-sapporo .cp-detected{color:#8FCFEA;}
+body.theme-sapporo .cp-btn{background:#2B2028;color:#C6C2B6;border-color:rgba(143,207,234,0.25);}
+body.theme-sapporo .cp-btn.primary{background:#5D8CAE;color:#EBF6F7;border-color:#8FCFEA;}
+body.theme-sapporo #cp-deck-info{background:#2B2028;color:#C6C2B6;}
+body.theme-sapporo #history-panel{background:#181B26;border-color:rgba(143,207,234,0.4);}
+body.theme-sapporo .hp-header{background:#181B26;}
+body.theme-sapporo .hp-title{color:#8FCFEA;}
+body.theme-sapporo .round-entry{background:#2B2028;border-color:rgba(143,207,234,0.2);}
+body.theme-sapporo .re-round{color:#EBF6F7;}
+body.theme-sapporo .re-winner{color:#C6C2B6;}
+body.theme-sapporo .re-yaku{color:#8FCFEA;}
+body.theme-sapporo .re-score{color:#78779B;}
+body.theme-sapporo .re-pts{color:#C6C2B6;}
+body.theme-sapporo .history-empty{color:#78779B;}
+body.theme-sapporo #btn-close-history{color:#C6C2B6;border-color:rgba(143,207,234,0.3);}
+
+
+/* ── Appearance panel ── */
+#appearance-panel-overlay{position:fixed;inset:0;background:rgba(0,8,18,0.7);z-index:180;display:flex;align-items:flex-start;justify-content:flex-end;}
+#appearance-panel-overlay.hidden{display:none;}
+#appearance-panel{background:var(--surface);border-left:0.5px solid var(--border2);width:min(320px,100vw);height:100vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;}
+.ap-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:0.5px solid var(--border);position:sticky;top:0;background:var(--surface);}
+.ap-title{font-size:14px;font-weight:600;color:var(--accent);letter-spacing:0.08em;}
+#btn-close-appearance{background:transparent;border:0.5px solid var(--border2);color:var(--text3);padding:3px 10px;font-size:12px;border-radius:var(--radius);cursor:pointer;}
+#btn-close-appearance:hover{background:var(--surface2);color:var(--text);}
+.ap-section-title{font-size:10px;color:var(--text3);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:6px;}
+.theme-options{display:flex;flex-direction:column;gap:8px;}
+.theme-btn{padding:12px 14px;border-radius:var(--radius);border:0.5px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px;cursor:pointer;text-align:left;font-family:inherit;transition:border-color 0.15s,background 0.15s;}
+.theme-btn:hover{border-color:var(--accent);}
+.theme-btn.active{border-color:var(--accent);border-width:1.5px;background:var(--surface3);}
+.theme-btn .tb-name{font-weight:600;display:block;margin-bottom:2px;}
+.theme-btn .tb-desc{font-size:11px;color:var(--text3);display:block;}
+#btn-open-appearance{padding:4px 10px;font-size:11px;background:var(--surface2);border:0.5px solid var(--border2);color:var(--text2);border-radius:var(--radius);cursor:pointer;transition:background 0.1s,border-color 0.1s;}
+#btn-open-appearance:hover{background:var(--surface3);border-color:var(--accent);color:var(--text);}
+
+
+/* ── Round history panel ── */
+#history-panel-overlay{position:fixed;inset:0;background:rgba(0,8,18,0.7);z-index:180;display:flex;align-items:flex-start;justify-content:flex-end;}
+#history-panel-overlay.hidden{display:none;}
+#history-panel{background:var(--surface);border-left:0.5px solid var(--border2);width:min(380px,100vw);height:100vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;}
+#history-panel::-webkit-scrollbar{width:4px;}
+#history-panel::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.hp-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:0.5px solid var(--border);position:sticky;top:0;background:var(--surface);}
+.hp-title{font-size:14px;font-weight:600;color:var(--accent);letter-spacing:0.08em;}
+#btn-close-history{background:transparent;border:0.5px solid var(--border2);color:var(--text3);padding:3px 10px;font-size:12px;border-radius:var(--radius);cursor:pointer;}
+#btn-close-history:hover{background:var(--surface2);color:var(--text);}
+.history-empty{font-size:12px;color:var(--text3);text-align:center;padding:20px 0;}
+.round-entry{background:var(--surface2);border:0.5px solid var(--border);border-radius:var(--radius);padding:9px 12px;display:flex;flex-direction:column;gap:4px;}
+.round-entry.p1-win{border-left:2px solid var(--green);}
+.round-entry.p2-win{border-left:2px solid var(--red);}
+.round-entry.draw{border-left:2px solid var(--text3);}
+.re-header{display:flex;justify-content:space-between;align-items:baseline;}
+.re-round{font-size:11px;font-weight:600;color:var(--text2);}
+.re-winner{font-size:11px;color:var(--text3);}
+.re-yaku{font-size:11px;color:var(--accent);}
+.re-score{font-size:11px;color:var(--text3);}
+.re-pts{font-size:12px;font-weight:600;color:var(--gold);}
+#btn-open-history,#btn-open-config,#btn-open-appearance{padding:4px 10px;font-size:11px;background:var(--surface2);border:0.5px solid var(--border2);color:var(--text2);border-radius:var(--radius);cursor:pointer;transition:background 0.1s,border-color 0.1s;}
+#btn-open-history:hover,#btn-open-config:hover,#btn-open-appearance:hover{background:var(--surface3);border-color:var(--accent);color:var(--text);}
+
+
+/* ── Config panel ── */
+#config-panel-overlay{position:fixed;inset:0;background:rgba(0,8,18,0.7);z-index:180;display:flex;align-items:flex-start;justify-content:flex-end;}
+#config-panel-overlay.hidden{display:none;}
+#config-panel{background:var(--surface);border-left:0.5px solid var(--border2);width:min(380px,100vw);height:100vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;}
+#config-panel::-webkit-scrollbar{width:4px;}
+#config-panel::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.cp-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:0.5px solid var(--border);position:sticky;top:0;background:var(--surface);}
+.cp-title{font-size:14px;font-weight:600;color:var(--accent);letter-spacing:0.08em;}
+#btn-close-config{background:transparent;border:0.5px solid var(--border2);color:var(--text3);padding:3px 10px;font-size:12px;border-radius:var(--radius);cursor:pointer;}
+#btn-close-config:hover{background:var(--surface2);color:var(--text);}
+.cp-section{display:flex;flex-direction:column;gap:8px;}
+.cp-section-title{font-size:10px;color:var(--text3);letter-spacing:0.12em;text-transform:uppercase;padding-bottom:4px;border-bottom:0.5px solid var(--border);}
+.cp-row{display:flex;align-items:center;gap:8px;}
+.cp-label{font-size:11px;color:var(--text2);min-width:80px;}
+.cp-select{background:var(--surface2);border:0.5px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:12px;padding:5px 8px;flex:1;cursor:pointer;}
+.cp-select:focus{outline:none;border-color:var(--accent);}
+.cp-note{font-size:10px;color:var(--text3);line-height:1.5;padding:6px 8px;background:var(--surface2);border-radius:var(--radius);border-left:2px solid var(--accent2);}
+.cp-detected{font-size:10px;color:var(--green);margin-top:2px;}
+.cp-btn-row{display:flex;gap:8px;margin-top:4px;position:sticky;bottom:0;background:var(--surface);padding:8px 0 4px;border-top:0.5px solid var(--border);}
+.cp-btn{padding:6px 14px;border-radius:var(--radius);border:0.5px solid var(--border2);background:var(--surface2);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;}
+.cp-btn:hover{background:var(--surface3);border-color:var(--accent);color:var(--text);}
+.cp-btn.primary{background:var(--accent2);color:#d8f0ff;border-color:var(--accent);}
+.cp-btn.primary:hover{background:var(--accent);}
+
+
+
+/* ── Ease rating buttons ── */
+#ease-row{display:flex;gap:8px;justify-content:center;margin-top:10px;}
+#ease-row.hidden{display:none;}
+.ease-btn{padding:7px 20px;border-radius:var(--radius);border:0.5px solid var(--border2);font-size:12px;cursor:pointer;font-family:inherit;transition:background 0.1s;}
+#ease-easy{background:rgba(var(--ease-easy-rgb,58,170,106),0.15);color:var(--ease-easy-color,var(--green));border-color:var(--ease-easy-color,var(--green));}
+#ease-easy:hover{background:rgba(var(--ease-easy-rgb,58,170,106),0.3);}
+#ease-hard{background:rgba(var(--ease-hard-rgb,208,80,80),0.12);color:var(--ease-hard-color,var(--red));border-color:var(--ease-hard-color,var(--red));}
+#ease-hard:hover{background:rgba(var(--ease-hard-rgb,208,80,80),0.25);}
+
+/* ── Yaku reference panel ── */
+#yaku-panel-overlay{position:fixed;inset:0;background:rgba(0,8,18,0.7);z-index:180;display:flex;align-items:flex-start;justify-content:flex-end;}
+#yaku-panel-overlay.hidden{display:none;}
+#yaku-panel{background:var(--surface);border-left:0.5px solid var(--border2);width:min(420px,100vw);height:100vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;}
+#yaku-panel::-webkit-scrollbar{width:4px;}
+#yaku-panel::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.yaku-panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;position:sticky;top:0;background:var(--surface);padding-bottom:8px;border-bottom:0.5px solid var(--border);}
+.yaku-panel-title{font-size:14px;font-weight:600;color:var(--accent);letter-spacing:0.08em;}
+#btn-close-yaku-panel{background:transparent;border:0.5px solid var(--border2);color:var(--text3);padding:3px 10px;font-size:12px;border-radius:var(--radius);cursor:pointer;}
+#btn-close-yaku-panel:hover{background:var(--surface2);color:var(--text);}
+.yaku-ref-item{background:var(--surface2);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;display:flex;flex-direction:column;gap:4px;}
+.yaku-ref-item.special{border-color:rgba(212,184,74,0.3);background:rgba(212,184,74,0.04);}
+.yaku-ref-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+.yaku-ref-name{font-size:13px;font-weight:600;color:var(--text);}
+.yaku-ref-jp{font-size:12px;color:var(--text3);}
+.yaku-ref-pts{font-size:13px;font-weight:600;color:var(--gold);white-space:nowrap;}
+.yaku-ref-desc{font-size:11px;color:var(--text2);line-height:1.5;}
+.yaku-ref-cards{font-size:10px;color:var(--text3);line-height:1.5;margin-top:2px;}
+.yaku-section-title{font-size:10px;color:var(--text3);letter-spacing:0.12em;text-transform:uppercase;padding:4px 0 2px;border-bottom:0.5px solid var(--border);margin-top:4px;}
+#btn-open-yaku-panel{padding:4px 12px;font-size:11px;background:var(--surface2);border:0.5px solid var(--border2);color:var(--text2);border-radius:var(--radius);cursor:pointer;transition:background 0.1s,border-color 0.1s;}
+#btn-open-yaku-panel:hover{background:var(--surface3);border-color:var(--accent);color:var(--text);}
+
+/* ── In-overlay settings block ── */
+.oya-settings{border-top:0.5px solid var(--border);margin-top:14px;padding-top:14px;}
+.oya-settings-title{font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:10px;}
+.oya-setting-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+.oya-setting-label{font-size:11px;color:var(--text2);min-width:110px;}
+.seg-ctrl{display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden;}
+.seg-btn{padding:4px 10px;font-size:11px;background:transparent;border:none;color:var(--text3);cursor:pointer;transition:background 0.1s,color 0.1s;font-family:inherit;}
+.seg-btn:hover{background:var(--surface3);color:var(--text);}
+.seg-btn.active{background:var(--accent2);color:#d8f0ff;}
+.toggle-wrap{display:flex;align-items:center;gap:5px;cursor:pointer;}
+.toggle-wrap input[type=checkbox]{appearance:none;width:28px;height:16px;border-radius:8px;background:var(--surface3);border:0.5px solid var(--border2);cursor:pointer;position:relative;transition:background 0.2s;}
+.toggle-wrap input[type=checkbox]::after{content:'';position:absolute;width:11px;height:11px;border-radius:50%;background:var(--text3);top:2px;left:2px;transition:left 0.2s,background 0.2s;}
+.toggle-wrap input[type=checkbox]:checked{background:var(--accent2);border-color:var(--accent);}
+.toggle-wrap input[type=checkbox]:checked::after{left:14px;background:#d8f0ff;}
+.toggle-wrap.locked{opacity:0.35;pointer-events:none;}
+.toggle-label{font-size:11px;color:var(--text2);}
+.hint-group{display:flex;gap:8px;align-items:center;}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="header-row">
+    <div class="game-title"><span>花札</span>Koi-Koi</div>
+    <div class="hctl">
+      <label>CPU</label>
+      <input type="range" id="speed-slider" min="400" max="3000" step="200" value="1000">
+      <span class="hval" id="speed-val">1.0s</span>
+      <label>Q/card</label>
+      <input type="range" id="q-slider" min="1" max="3" step="1" value="1">
+      <span class="hval" id="q-val">1</span>
+      <span style="width:0.5px;height:14px;background:var(--border2);flex-shrink:0;margin:0 4px;"></span>
+      <label class="toggle-wrap" id="hide-choices-header-wrap" title="Hide choices until you click Show">
+        <input type="checkbox" id="toggle-hide-choices-header">
+        <span class="toggle-label">Hide Choices</span>
+      </label>
+      <span style="width:0.5px;height:14px;background:var(--border2);flex-shrink:0;margin:0 4px;"></span>
+      <button id="btn-open-history">History</button>
+      <button id="btn-open-config">Config</button>
+      <button id="btn-open-appearance">Appearance</button>
+    </div>
+    <div id="phase-label"></div>
+  </div>
+
+  <div class="score-box" id="p2-box">
+    <div class="score-top">
+      <span class="sname" id="p2-name">CPU · 相手</span>
+      <span class="pts" id="p2-pts">30</span><span class="pts-label">pts</span>
+    </div>
+    <div class="cap-scroll" id="p2-cap"></div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;">
+  <div id="log" style="flex:1;">Press New Game to start · 新しいゲームを始めましょう</div>
+  <div id="bridge-status" title="Anki bridge connection status" style="font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0;transition:color 0.3s;">⬤ connecting...</div>
+</div>
+
+  <div class="field-wrap">
+    <div class="area-label">Field <span class="area-label-jp">場札</span></div>
+    <div id="field"></div>
+  </div>
+
+  <div class="btn-row">
+    <button id="btn-new" class="game-over">New Game · 新ゲーム</button>
+    <button class="koi" id="btn-koi" disabled>こいこい · Koi-Koi ➜</button>
+    <button id="btn-stop" disabled>Stop &amp; Collect · やめ</button>
+  </div>
+
+  <div class="hand-wrap">
+    <div class="area-label">Your Hand <span class="area-label-jp">手札</span></div>
+    <div id="p1-hand"></div>
+  </div>
+
+  <div class="score-box" id="p1-box">
+    <div class="score-top">
+      <span class="sname" id="p1-name">You · あなた</span>
+      <span class="pts" id="p1-pts">30</span><span class="pts-label">pts</span>
+    </div>
+    <div class="cap-scroll" id="p1-cap"></div>
+  </div>
+
+  <div class="yaku-section">
+    <div class="yaku-title" style="display:flex;align-items:center;gap:8px;">役 Yaku (your captured combos)<button id="btn-open-yaku-panel">Yaku Guide 役一覧</button></div>
+    <div class="yaku-grid" id="yaku-grid"></div>
+  </div>
+</div>
+
+<!-- Banners -->
+<div class="banner hidden" id="koi-banner"><div class="banner-inner">こいこい! · Koi-Koi!</div></div>
+<div class="banner hidden" id="stop-banner"><div class="banner-inner">やめ · Stop!<span class="ban-sub" id="stop-sub"></span></div></div>
+<div class="banner hidden" id="yaku-banner"><div class="banner-inner" id="yaku-banner-inner"></div></div>
+
+<!-- Oya overlay -->
+<div class="overlay hidden" id="oya-overlay">
+  <div class="obox">
+    <h2>Dealer Flip · 親決め</h2>
+    <p>Each player draws a card. Lower month = goes first as dealer (親 Oya).<br>Ties are redrawn.</p>
+    <div class="oya-cards">
+      <div class="oya-wrap"><div class="card back" id="oya-your-card"></div><div class="olabel">You · あなた</div></div>
+      <div class="oya-wrap"><div class="card back" id="oya-cpu-card"></div><div class="olabel">CPU · 相手</div></div>
+    </div>
+    <div id="oya-result"></div>
+
+    <div class="oya-settings">
+      <div class="oya-settings-title">Game Options · ゲーム設定</div>
+
+      <div class="oya-setting-row">
+        <span class="oya-setting-label">CPU difficulty</span>
+        <div class="seg-ctrl" id="difficulty-ctrl">
+          <button class="seg-btn" data-val="easy">Easy</button>
+          <button class="seg-btn active" data-val="normal">Normal</button>
+          <button class="seg-btn" data-val="hard">Hard</button>
+        </div>
+      </div>
+
+      <div class="oya-setting-row">
+        <span class="oya-setting-label">Game mode</span>
+        <div class="seg-ctrl" id="gamemode-ctrl">
+          <button class="seg-btn" data-val="up">Count Up (start 0, 12 rounds)</button>
+          <button class="seg-btn active" data-val="down">Count Down (start 30, steal pts)</button>
+        </div>
+      </div>
+
+      <div class="oya-setting-row">
+        <span class="oya-setting-label">Wrong answer</span>
+        <div class="seg-ctrl" id="penalty-ctrl">
+          <button class="seg-btn" data-val="learning">Learning</button>
+          <button class="seg-btn active" data-val="full">Full Penalty</button>
+          <button class="seg-btn" data-val="retry">Retry (3 strikes)</button>
+          <button class="seg-btn" data-val="duel">Duel Mode</button>
+        </div>
+      </div>
+
+      <div class="oya-setting-row">
+        <span class="oya-setting-label">Hints</span>
+        <div class="hint-group">
+          <label class="toggle-wrap" id="toggle-hints-3-wrap">
+            <input type="checkbox" id="toggle-hints-3">
+            <span class="toggle-label">3 per game</span>
+          </label>
+          <label class="toggle-wrap" id="toggle-hints-ul-wrap">
+            <input type="checkbox" id="toggle-hints-ul">
+            <span class="toggle-label">Unlimited</span>
+          </label>
+          <span style="font-size:10px;color:var(--text3);">(reveals correct answer)</span>
+        </div>
+      </div>
+
+      <div class="oya-setting-row">
+        <span class="oya-setting-label">Questions / card</span>
+        <div class="seg-ctrl" id="qpercard-ctrl">
+          <button class="seg-btn active" data-val="1">1</button>
+          <button class="seg-btn" data-val="2">2</button>
+          <button class="seg-btn" data-val="3">3</button>
+        </div>
+        <span style="font-size:10px;color:var(--text3);">Questions you must answer to capture a card</span>
+      </div>
+
+      <div class="oya-setting-row">
+        <span class="oya-setting-label">Hide choices</span>
+        <label class="toggle-wrap" id="toggle-hide-choices-wrap">
+          <input type="checkbox" id="toggle-hide-choices">
+          <span class="toggle-label" id="hide-choices-label">Off</span>
+        </label>
+        <span style="font-size:10px;color:var(--text3);">Click "Show Choices" when ready — can change freely during game</span>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:14px"><button id="oya-btn" style="background:var(--accent2);color:#d8f0ff;border-color:var(--accent);font-weight:600;">Flip Cards · めくる</button></div>
+  </div>
+</div>
+
+<!-- Vocab challenge -->
+<div class="overlay hidden" id="challenge-overlay">
+  <div class="obox">
+    <div class="eyebrow">Answer to capture · 答えて札を取る</div>
+    <div class="hint-row">
+      <button id="btn-hint">💡 Hint</button>
+      <span id="hint-count"></span>
+    </div>
+    <div class="ch-q" id="ch-question"></div>
+    <div id="choices-container">
+      <button id="btn-show-choices" class="hidden">Show Choices</button>
+      <div class="choices" id="ch-choices"></div>
+    </div>
+    <div class="ch-stake" id="ch-stake"></div>
+    <div id="ease-row" class="hidden">
+      <button class="ease-btn" id="ease-hard">Hard</button>
+      <button class="ease-btn" id="ease-easy">Easy</button>
+    </div>
+  </div>
+</div>
+
+<!-- Duel overlay -->
+<div class="overlay hidden" id="duel-overlay">
+  <div class="obox">
+    <h2>Duel! · 決闘</h2>
+    <p>Wrong answer — draw for the contested cards.
+Lower month wins the pair.</p>
+    <div class="duel-cards">
+      <div class="duel-wrap"><div class="card back" id="duel-your-card"></div><div class="dlabel">You</div></div>
+      <div class="duel-wrap"><div class="card back" id="duel-cpu-card"></div><div class="dlabel">CPU</div></div>
+    </div>
+    <div id="duel-result"></div>
+    <div style="text-align:center"><button id="duel-btn" style="background:var(--accent2);color:#d8f0ff;border-color:var(--accent);font-weight:600;">Draw Cards · めくる</button></div>
+  </div>
+</div>
+
+<!-- Round/game result -->
+<div class="overlay hidden" id="round-overlay">
+  <div class="obox"><h2 id="ov-title"></h2><p id="ov-body"></p>
+    <div style="text-align:center"><button id="ov-btn" onclick="closeOverlay()" style="background:var(--accent2);color:#d8f0ff;border-color:var(--accent);font-weight:600;">OK</button></div>
+  </div>
+</div>
+
+
+<!-- Round history panel -->
+<div id="history-panel-overlay" class="hidden">
+  <div id="history-panel">
+    <div class="hp-header">
+      <span class="hp-title">Round History</span>
+      <button id="btn-close-history">✕ Close</button>
+    </div>
+    <div id="history-list"><div class="history-empty">No rounds played yet.</div></div>
+  </div>
+</div>
+
+<!-- Config panel -->
+<div id="config-panel-overlay" class="hidden">
+  <div id="config-panel">
+    <div class="cp-header">
+      <span class="cp-title">Field Config</span>
+      <button id="btn-close-config">✕ Close</button>
+    </div>
+
+    <div class="cp-section">
+      <div class="cp-section-title">Current Deck Info</div>
+      <div id="cp-deck-info" class="cp-note">Select a deck first, then open Config to see its fields.</div>
+    </div>
+
+    <div class="cp-section">
+      <div class="cp-section-title">Question Field</div>
+      <div class="cp-note">The field shown as the question to answer. Usually the word in the target language.</div>
+      <div class="cp-row">
+        <span class="cp-label">Field</span>
+        <select id="cp-q-field" class="cp-select">
+          <option value="auto">Auto-detect</option>
+        </select>
+      </div>
+      <div id="cp-q-detected" class="cp-detected"></div>
+    </div>
+
+    <div class="cp-section">
+      <div class="cp-section-title">Answer Field</div>
+      <div class="cp-note">The field shown as the correct answer and used for the multiple choice options.</div>
+      <div class="cp-row">
+        <span class="cp-label">Field</span>
+        <select id="cp-a-field" class="cp-select">
+          <option value="auto">Auto-detect</option>
+        </select>
+      </div>
+      <div id="cp-a-detected" class="cp-detected"></div>
+    </div>
+
+    <div class="cp-section">
+      <div class="cp-section-title">Card Pool &amp; Pacing</div>
+      <div class="cp-note">Control how new and reviewed cards are balanced during a game.</div>
+
+      <div class="cp-row" style="margin-top:6px;">
+        <span class="cp-label">Active pool</span>
+        <input type="range" id="cp-pool-size" min="5" max="50" step="5" value="20" style="flex:1;accent-color:var(--accent);">
+        <span style="font-size:11px;color:var(--text2);min-width:60px;text-align:right;" id="cp-pool-label">20 cards</span>
+      </div>
+      <div class="cp-note" style="margin-top:2px;">How many cards are in your active study pool. Once you've seen them all, new cards are added. Smaller = more repetition, larger = more variety.</div>
+
+      <div class="cp-row" style="margin-top:8px;gap:10px;">
+        <span class="cp-label" style="min-width:40px;">New</span>
+        <input type="range" id="cp-focus" min="0" max="2" step="1" value="1" style="flex:1;accent-color:var(--accent);">
+        <span class="cp-label" style="min-width:50px;text-align:right;">Review</span>
+      </div>
+      <div style="text-align:center;font-size:10px;color:var(--text3);margin-top:2px;" id="cp-focus-label">Balanced — mix of new and seen cards</div>
+    </div>
+
+    <div class="cp-section">
+      <div class="cp-section-title">Ease Rating Buttons</div>
+      <div class="cp-note">Show Easy / Hard buttons after answering, to fine-tune Anki scheduling. Easy lengthens the card review interval; Hard shortens it.</div>
+      <div class="cp-row">
+        <label class="toggle-wrap">
+          <input type="checkbox" id="cp-show-ease">
+          <span class="toggle-label">Show Easy / Hard buttons</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="cp-btn-row">
+      <button class="cp-btn primary" id="cp-save">Save &amp; Apply</button>
+      <button class="cp-btn" id="cp-reset">Reset to Auto</button>
+    </div>
+  </div>
+</div>
+
+<!-- Appearance panel -->
+<div id="appearance-panel-overlay" class="hidden">
+  <div id="appearance-panel">
+    <div class="ap-header">
+      <span class="ap-title">Appearance</span>
+      <button id="btn-close-appearance">✕ Close</button>
+    </div>
+    <div>
+      <div class="ap-section-title">Theme</div>
+      <div class="theme-options">
+        <button class="theme-btn active" data-theme="tokyo">
+          <span class="tb-name">Tokyo</span>
+          <span class="tb-desc">Default dark blue — easy on the eyes</span>
+        </button>
+        <button class="theme-btn" data-theme="nara">
+          <span class="tb-name">Nara</span>
+          <span class="tb-desc">Ancient cedar forests, deer parks, warm chestnut and amber</span>
+        </button>
+        <button class="theme-btn" data-theme="hirosaki">
+          <span class="tb-name">Hirosaki</span>
+          <span class="tb-desc">Cherry blossoms and peach — soft pinks and warm whites</span>
+        </button>
+        <button class="theme-btn" data-theme="fukuoka">
+          <span class="tb-name">Fukuoka</span>
+          <span class="tb-desc">Night harbour — deep navy, teal panels, lavender accent</span>
+        </button>
+        <button class="theme-btn" data-theme="kyoto">
+          <span class="tb-name">Kyoto</span>
+          <span class="tb-desc">Heian court — imperial green, gold lacquer, vermillion and silk</span>
+        </button>
+        <button class="theme-btn" data-theme="sapporo">
+          <span class="tb-name">Sapporo</span>
+          <span class="tb-desc">Hokkaido night — ink-black, snow-white borders, cold steel-blue light</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Yaku reference panel -->
+<div id="yaku-panel-overlay" class="hidden">
+  <div id="yaku-panel">
+    <div class="yaku-panel-header">
+      <span class="yaku-panel-title">役一覧 Yaku Reference</span>
+      <button id="btn-close-yaku-panel">✕ Close</button>
+    </div>
+
+    <div class="yaku-section-title">Bright Card Yaku · 光役</div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Goko · 五光</span><span class="yaku-ref-pts">10 pts</span></div>
+      <div class="yaku-ref-jp">Five Lights</div>
+      <div class="yaku-ref-desc">All five bright (20-point) cards.</div>
+      <div class="yaku-ref-cards">Pine Crane · Cherry Curtain · Susuki Moon · Willow Rain Man · Paulownia Phoenix</div>
+    </div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Shiko · 四光</span><span class="yaku-ref-pts">8 pts</span></div>
+      <div class="yaku-ref-jp">Four Lights</div>
+      <div class="yaku-ref-desc">Any four bright cards, NOT including the Willow Rain Man.</div>
+      <div class="yaku-ref-cards">Any 4 of: Pine Crane · Cherry Curtain · Susuki Moon · Paulownia Phoenix</div>
+    </div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Ame-Shiko · 雨四光</span><span class="yaku-ref-pts">7 pts</span></div>
+      <div class="yaku-ref-jp">Rainy Four Lights</div>
+      <div class="yaku-ref-desc">Any four bright cards, including the Willow Rain Man (Ono no Michikaze).</div>
+      <div class="yaku-ref-cards">Willow Rain Man + any 3 other brights</div>
+    </div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Sankou · 三光</span><span class="yaku-ref-pts">5 pts</span></div>
+      <div class="yaku-ref-jp">Three Lights</div>
+      <div class="yaku-ref-desc">Any three bright cards, NOT including the Willow Rain Man.</div>
+      <div class="yaku-ref-cards">Any 3 of: Pine Crane · Cherry Curtain · Susuki Moon · Paulownia Phoenix</div>
+    </div>
+
+    <div class="yaku-section-title">Viewing Yaku · 花見役</div>
+
+    <div class="yaku-ref-item special">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Tsukimi-zake · 月見酒</span><span class="yaku-ref-pts">5 pts</span></div>
+      <div class="yaku-ref-jp">Moon Viewing Sake</div>
+      <div class="yaku-ref-desc">The Susuki Moon (August bright) together with the Chrysanthemum Sake Cup (September seed). Cumulative with Hanami-zake.</div>
+      <div class="yaku-ref-cards">Susuki Moon + Chrysanthemum Sake Cup</div>
+    </div>
+
+    <div class="yaku-ref-item special">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Hanami-zake · 花見酒</span><span class="yaku-ref-pts">5 pts</span></div>
+      <div class="yaku-ref-jp">Cherry Blossom Viewing Sake</div>
+      <div class="yaku-ref-desc">The Cherry Curtain (March bright) together with the Chrysanthemum Sake Cup (September seed). Cumulative with Tsukimi-zake.</div>
+      <div class="yaku-ref-cards">Cherry Curtain + Chrysanthemum Sake Cup</div>
+    </div>
+
+    <div class="yaku-section-title">Animal Seed Yaku · 種役</div>
+
+    <div class="yaku-ref-item special">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Inoshikacho · 猪鹿蝶</span><span class="yaku-ref-pts">5 pts</span></div>
+      <div class="yaku-ref-jp">Boar, Deer, Butterflies</div>
+      <div class="yaku-ref-desc">The three animal seed cards: Boar (Bush Clover, July), Deer (Maple, October), and Butterflies (Peony, June).</div>
+      <div class="yaku-ref-cards">Bush Clover Boar + Maple Deer + Peony Butterflies</div>
+    </div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Tane · タネ</span><span class="yaku-ref-pts">1 pt + 1 per extra</span></div>
+      <div class="yaku-ref-jp">Animals / Seeds</div>
+      <div class="yaku-ref-desc">Any 5 seed (10-point) cards. +1 pt for each additional seed card beyond 5. The Chrysanthemum Sake Cup counts as both a seed and a kasu card.</div>
+      <div class="yaku-ref-cards">Any 5+ seed cards</div>
+    </div>
+
+    <div class="yaku-section-title">Ribbon Yaku · 短冊役</div>
+
+    <div class="yaku-ref-item special">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Akatan + Aotan · 赤短・青短の重複</span><span class="yaku-ref-pts">10 pts</span></div>
+      <div class="yaku-ref-jp">Red + Blue Combination</div>
+      <div class="yaku-ref-desc">Having both the Akatan and Aotan combinations at once. Awards points for both plus this bonus — scores separately from individual Akatan/Aotan.</div>
+      <div class="yaku-ref-cards">All 3 red poetry ribbons + all 3 blue ribbons</div>
+    </div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Akatan · 赤短</span><span class="yaku-ref-pts">5 pts</span></div>
+      <div class="yaku-ref-jp">Red Poetry Ribbons</div>
+      <div class="yaku-ref-desc">All three red poetry ribbon cards, each inscribed with a poem.</div>
+      <div class="yaku-ref-cards">Pine ribbon (Jan) + Plum ribbon (Feb) + Cherry ribbon (Mar)</div>
+    </div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Aotan · 青短</span><span class="yaku-ref-pts">5 pts</span></div>
+      <div class="yaku-ref-jp">Blue Ribbons</div>
+      <div class="yaku-ref-desc">All three blue ribbon cards.</div>
+      <div class="yaku-ref-cards">Peony ribbon (Jun) + Chrysanthemum ribbon (Sep) + Maple ribbon (Oct)</div>
+    </div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Tanzaku · 短冊</span><span class="yaku-ref-pts">1 pt + 1 per extra</span></div>
+      <div class="yaku-ref-jp">Poetry Slips</div>
+      <div class="yaku-ref-desc">Any 5 ribbon cards. +1 pt for each ribbon card beyond 5.</div>
+      <div class="yaku-ref-cards">Any 5+ ribbon cards</div>
+    </div>
+
+    <div class="yaku-section-title">Kasu Yaku · 粕役</div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Kasu · 粕</span><span class="yaku-ref-pts">1 pt + 1 per extra</span></div>
+      <div class="yaku-ref-jp">Chaff</div>
+      <div class="yaku-ref-desc">Any 10 kasu (plain) cards. +1 pt for each kasu card beyond 10.</div>
+      <div class="yaku-ref-cards">Any 10+ kasu cards</div>
+    </div>
+
+    <div class="yaku-section-title">Instant Win Deals · 即勝</div>
+
+    <div class="yaku-ref-item special">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Teshi · 手四</span><span class="yaku-ref-pts">6 pts</span></div>
+      <div class="yaku-ref-jp">Four of a Suit in Hand</div>
+      <div class="yaku-ref-desc">Being dealt all four cards of the same month/suit in your opening hand. The round ends immediately. If dealt to the field, the hand is void and redealt.</div>
+    </div>
+
+    <div class="yaku-ref-item special">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Kuttsuki · くっつき</span><span class="yaku-ref-pts">6 pts</span></div>
+      <div class="yaku-ref-jp">Four Pairs in Hand</div>
+      <div class="yaku-ref-desc">Being dealt four pairs of cards (two cards from four different months) in your opening hand. Round ends immediately.</div>
+    </div>
+
+    <div class="yaku-section-title">Scoring Rules · 得点ルール</div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">7+ Point Bonus</span><span class="yaku-ref-pts">×2</span></div>
+      <div class="yaku-ref-desc">If your yaku total 7 or more points when the round ends, your score is doubled.</div>
+    </div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Koi-Koi Penalty</span><span class="yaku-ref-pts">×2</span></div>
+      <div class="yaku-ref-desc">If your opponent called Koi-Koi and you subsequently form a yaku, your score is doubled (and their Koi-Koi earns them nothing).</div>
+    </div>
+
+    <div class="yaku-ref-item special">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Double Bonus</span><span class="yaku-ref-pts">×4</span></div>
+      <div class="yaku-ref-desc">If you have 7+ pts AND your opponent called Koi-Koi, both multipliers apply for a total of ×4.</div>
+    </div>
+
+    <div class="yaku-ref-item">
+      <div class="yaku-ref-top"><span class="yaku-ref-name">Oya-Ken · 親権</span><span class="yaku-ref-pts">1 pt</span></div>
+      <div class="yaku-ref-jp">Dealer's Privilege</div>
+      <div class="yaku-ref-desc">If neither player forms a yaku and cards run out, the dealer (Oya ★) gains 1 point and keeps the deal for the next round.</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Data ─────────────────────────────────────────────────────────────────────
+const MONTH_DATA=[
+  {en:'January',  jp:'一月', themeJP:'松',  theme:'Pine'},
+  {en:'February', jp:'二月', themeJP:'梅',  theme:'Plum'},
+  {en:'March',    jp:'三月', themeJP:'桜',  theme:'Cherry'},
+  {en:'April',    jp:'四月', themeJP:'藤',  theme:'Wisteria'},
+  {en:'May',      jp:'五月', themeJP:'菖蒲',theme:'Iris'},
+  {en:'June',     jp:'六月', themeJP:'牡丹',theme:'Peony'},
+  {en:'July',     jp:'七月', themeJP:'萩',  theme:'Bush Clover'},
+  {en:'August',   jp:'八月', themeJP:'芒',  theme:'Susuki/Moon'},
+  {en:'September',jp:'九月', themeJP:'菊',  theme:'Chrysanthemum'},
+  {en:'October',  jp:'十月', themeJP:'紅葉',theme:'Maple'},
+  {en:'November', jp:'十一月',themeJP:'柳', theme:'Willow'},
+  {en:'December', jp:'十二月',themeJP:'桐', theme:'Paulownia'},
+];
+const TYPE_JP={bright:'光',ribbon:'短冊',tane:'種',kasu:'粕'};
+const TYPE_EN={bright:'Bright',ribbon:'Ribbon',tane:'Seed',kasu:'Kasu'};
+const TYPE_COLOR={bright:'#d4b84a',ribbon:'#d05050',tane:'#3aaa6a',kasu:'#445a6a'};
+const EMOJI=['🌸','🍑','🌿','🌺','🌀','🦋','🌙','🌕','🍁','🦌','⚡','🌊'];
+const CARD_TYPES=[
+  ['bright','ribbon','kasu','kasu'],   // Jan(0)  Pine
+  ['ribbon','tane','kasu','kasu'],     // Feb(1)  Plum
+  ['bright','ribbon','kasu','kasu'],   // Mar(2)  Cherry / Curtain (bright)
+  ['ribbon','tane','kasu','kasu'],     // Apr(3)  Wisteria
+  ['ribbon','tane','kasu','kasu'],     // May(4)  Iris
+  ['ribbon','tane','kasu','kasu'],     // Jun(5)  Peony
+  ['ribbon','tane','kasu','kasu'],     // Jul(6)  Bush Clover
+  ['bright','tane','kasu','kasu'],     // Aug(7)  Susuki / Moon (bright)
+  ['ribbon','tane','kasu','kasu'],     // Sep(8)  Chrysanthemum  tane=Sake Cup
+  ['ribbon','tane','kasu','kasu'],     // Oct(9)  Maple
+  ['bright','ribbon','tane','kasu'],   // Nov(10) Willow / Rain man (bright)
+  ['bright','kasu','kasu','kasu'],     // Dec(11) Paulownia
+];
+// Special card IDs:
+// Sake Cup = Sep tane = month 8, pos 1 → id 8*4+1 = 33
+// Curtain (Cherry bright) = month 2, pos 0 → id 8
+// Moon (Aug bright) = month 7, pos 0 → id 28
+// Boar (Bush Clover tane Jul) = month 6 pos 1 → id 25
+// Deer (Maple tane Oct) = month 9 pos 1 → id 37
+// Butterflies (Peony tane Jun) = month 5 pos 1 → id 21
+const SAKE_CUP_ID=33, CURTAIN_ID=8, MOON_ID=28;
+const BOAR_ID=25, DEER_ID=37, BUTTERFLIES_ID=21;
+const TYPE_ORDER=['bright','ribbon','tane','kasu'];
+
+// ── Variable-score yaku helpers ───────────────────────────────────────────────
+function taneScore(cap){const n=cap.filter(x=>x.type==='tane').length;return n>=5?1+(n-5):0;}
+function tanzakuScore(cap){const n=cap.filter(x=>x.type==='ribbon').length;return n>=5?1+(n-5):0;}
+function kasuScore(cap){const n=cap.filter(x=>x.type==='kasu').length;return n>=10?1+(n-10):0;}
+function hasSakeC(cap){return cap.some(c=>c.id===SAKE_CUP_ID);}
+
+// YAKU_DEFS — returns {name,jp,desc,pts} or null
+// pts=0 means variable (computed separately)
+const YAKU_DEFS=[
+  {name:'Kasu',        jp:'粕',      desc:'10+ kasu cards (+1 each extra)',pts:0,check:c=>kasuScore(c)>0},
+  {name:'Tane',        jp:'タネ',    desc:'5+ seed cards (+1 each extra)',pts:0,check:c=>taneScore(c)>0},
+  {name:'Tanzaku',     jp:'短冊',    desc:'5+ ribbons (+1 each extra)', pts:0,  check:c=>tanzakuScore(c)>0},
+  {name:'Akatan',      jp:'赤短',    desc:'3 red poetry ribbons (Jan/Feb/Mar)',pts:5, check:c=>[0,1,2].every(m=>c.find(x=>x.type==='ribbon'&&x.month===m))},
+  {name:'Aotan',       jp:'青短',    desc:'3 blue ribbons (Jun/Sep/Oct)',pts:5, check:c=>[5,8,9].every(m=>c.find(x=>x.type==='ribbon'&&x.month===m))},
+  {name:'Inoshikacho', jp:'猪鹿蝶',  desc:'Boar + Deer + Butterflies', pts:5,  check:c=>c.some(x=>x.id===BOAR_ID)&&c.some(x=>x.id===DEER_ID)&&c.some(x=>x.id===BUTTERFLIES_ID)},
+  {name:'Tsukimi-zake',jp:'月見酒',  desc:'Moon + Sake Cup',           pts:5,  check:c=>c.some(x=>x.id===MOON_ID)&&hasSakeC(c)},
+  {name:'Hanami-zake', jp:'花見酒',  desc:'Curtain + Sake Cup',        pts:5,  check:c=>c.some(x=>x.id===CURTAIN_ID)&&hasSakeC(c)},
+  {name:'Sankou',      jp:'三光',    desc:'3 brights (excl. Rain)',    pts:5,  check:c=>brights(c).length===3&&!brights(c).find(x=>x.month===10)},
+  {name:'Ame-Shiko',   jp:'雨四光',  desc:'4 brights incl. Rain Man', pts:7,  check:c=>brights(c).length===4&&!!brights(c).find(x=>x.month===10)},
+  {name:'Shiko',       jp:'四光',    desc:'4 brights (excl. Rain)',    pts:8,  check:c=>brights(c).length===4&&!brights(c).find(x=>x.month===10)},
+  {name:'Akatan+Aotan',jp:'赤短·青短',desc:'All 6 poetry+blue ribbons',pts:10, check:c=>[0,1,2].every(m=>c.find(x=>x.type==='ribbon'&&x.month===m))&&[5,8,9].every(m=>c.find(x=>x.type==='ribbon'&&x.month===m))},
+  {name:'Goko',        jp:'五光',    desc:'All 5 brights',             pts:10, check:c=>brights(c).length>=5},
+];
+function brights(c){return c.filter(x=>x.type==='bright');}
+
+function checkYaku(cap){return YAKU_DEFS.filter(y=>y.check(cap)).map(y=>y.name);}
+
+function scoreYaku(names,cap){
+  // Akatan+Aotan is exclusive with individual Akatan/Aotan
+  let active=names;
+  if(active.includes('Akatan+Aotan')) active=active.filter(n=>n!=='Akatan'&&n!=='Aotan');
+  return active.reduce((s,n)=>{
+    const d=YAKU_DEFS.find(y=>y.name===n);
+    if(!d) return s;
+    if(d.pts>0) return s+d.pts;
+    if(n==='Tane') return s+taneScore(cap);
+    if(n==='Tanzaku') return s+tanzakuScore(cap);
+    if(n==='Kasu') return s+kasuScore(cap);
+    return s;
+  },0);
+}
+
+function yakuPtsDisplay(name,cap){
+  const d=YAKU_DEFS.find(y=>y.name===name);
+  if(!d) return 0;
+  if(d.pts>0) return d.pts;
+  if(name==='Tane') return taneScore(cap);
+  if(name==='Tanzaku') return tanzakuScore(cap);
+  if(name==='Kasu') return kasuScore(cap);
+  return 0;
+}
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+let cpuSpeed=1000, questionsPerCard=1;
+// Settings state
+let penaltyMode='full';
+// Field configuration — null means auto-detect
+let fieldConfig={questionField:null, answerField:null};
+let sessionFocus=1;   // 0=New, 1=Balanced, 2=Review
+let sessionPoolSize=20; // active card pool size
+let showEaseButtons=false;
+
+// Field names from current deck (populated when deck loads)
+let deckFieldNames=[];
+
+// Auto-detection heuristics
+const QUESTION_PREFERRED=['hanzi','chinese','japanese','kanji','tibetan','arabic','korean','russian','german','french','spanish','italian','portuguese','dutch','hebrew','turkish','hindi','thai','vietnamese','latin','greek','word','term','front','target','vocab','vocabulary','expression','phrase','character','kana','foreign','source','native word','question'];
+const ANSWER_PREFERRED=['english','definition','meaning','translation','back','answer','gloss','definition','deutsch','français','español'];
+const ANSWER_SKIP=['pinyin','romaji','romanization','reading','audio','pronunciation','ipa','furigana','kana'];
+
+function autoDetectFields(fieldNames){
+  const lower=fieldNames.map(f=>f.toLowerCase());
+  let qIdx=null, aIdx=null;
+  // Find best question field
+  for(const pref of QUESTION_PREFERRED){
+    const i=lower.findIndex(f=>f.includes(pref));
+    if(i!==-1){qIdx=i;break;}
+  }
+  // Find best answer field — must not be in skip list
+  for(const pref of ANSWER_PREFERRED){
+    const i=lower.findIndex((f,idx)=>{
+      if(idx===qIdx) return false;
+      if(ANSWER_SKIP.some(s=>f.includes(s))) return false;
+      return f.includes(pref);
+    });
+    if(i!==-1){aIdx=i;break;}
+  }
+  // Fallback: pick first two usable non-audio fields
+  if(qIdx===null||aIdx===null){
+    const usable=lower.map((f,i)=>({i,f})).filter(x=>!ANSWER_SKIP.some(s=>x.f.includes(s)));
+    if(qIdx===null&&usable.length>0) qIdx=usable[0].i;
+    if(aIdx===null&&usable.length>1) aIdx=usable.find(x=>x.i!==qIdx)?.i??null;
+  }
+  return {qIdx, aIdx};
+} // 'full' | 'retry' | 'duel'
+let gameMode='down';
+let cpuDifficulty='normal'; // 'easy' | 'normal' | 'hard'
+let roundHistory=[];
+let sessionStats={
+  cardsAnswered:0,
+  correctFirst:0,   // correct on first try, no hint
+  hintsUsed:0,
+  wrongAnswers:0,
+  easyTapped:0,
+  hardTapped:0,
+  startTime:null,
+};
+function resetSessionStats(){
+  sessionStats={cardsAnswered:0,correctFirst:0,hintsUsed:0,wrongAnswers:0,easyTapped:0,hardTapped:0,startTime:Date.now()};
+} // 'up' | 'down'
+let hintsMode='none';   // 'none' | '3' | 'unlimited'
+let hideChoices=false;
+let hintsRemaining=3;
+let gameSettingsLocked=false; // locked once a round starts
+
+// All settings listeners wired in initSettingsListeners() after DOM ready
+function initSettingsListeners(){
+  document.getElementById('speed-slider').addEventListener('input',function(){
+    cpuSpeed=+this.value;
+    document.getElementById('speed-val').textContent=(cpuSpeed/1000).toFixed(1)+'s';
+  });
+  document.getElementById('q-slider').addEventListener('input',function(){
+    questionsPerCard=+this.value;
+    document.getElementById('q-val').textContent=questionsPerCard;
+  });
+  // CPU difficulty
+  document.getElementById('difficulty-ctrl').addEventListener('click',function(e){
+    if(gameSettingsLocked) return;
+    const btn=e.target.closest('.seg-btn'); if(!btn) return;
+    document.querySelectorAll('#difficulty-ctrl .seg-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    cpuDifficulty=btn.dataset.val;
+  });
+  // Game mode
+  document.getElementById('gamemode-ctrl').addEventListener('click',function(e){
+    if(gameSettingsLocked) return;
+    const btn=e.target.closest('.seg-btn'); if(!btn) return;
+    document.querySelectorAll('#gamemode-ctrl .seg-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    gameMode=btn.dataset.val;
+  });
+  // Penalty mode — inside oya overlay, safe after DOM ready
+  document.getElementById('penalty-ctrl').addEventListener('click',function(e){
+    if(gameSettingsLocked) return;
+    const btn=e.target.closest('.seg-btn'); if(!btn) return;
+    document.querySelectorAll('#penalty-ctrl .seg-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    penaltyMode=btn.dataset.val;
+  });
+  // Hint toggles — mutually exclusive
+  document.getElementById('toggle-hints-3').addEventListener('change',function(){
+    if(this.checked){document.getElementById('toggle-hints-ul').checked=false; hintsMode='3';}
+    else hintsMode='none';
+  });
+  document.getElementById('toggle-hints-ul').addEventListener('change',function(){
+    if(this.checked){document.getElementById('toggle-hints-3').checked=false; hintsMode='unlimited';}
+    else hintsMode='none';
+  });
+  // Hide choices — two toggles (oya overlay + header), kept in sync
+  function syncHideChoices(val){
+    hideChoices=val;
+    document.getElementById('toggle-hide-choices').checked=val;
+    document.getElementById('toggle-hide-choices-header').checked=val;
+    const lbl=document.getElementById('hide-choices-label');
+    if(lbl) lbl.textContent=val?'On':'Off';
+  }
+  document.getElementById('toggle-hide-choices').addEventListener('change',function(){
+    syncHideChoices(this.checked);
+  });
+  document.getElementById('toggle-hide-choices-header').addEventListener('change',function(){
+    syncHideChoices(this.checked);
+  });
+  // Q per card segmented control (oya overlay)
+  document.getElementById('qpercard-ctrl').addEventListener('click',function(e){
+    const btn=e.target.closest('.seg-btn'); if(!btn) return;
+    document.querySelectorAll('#qpercard-ctrl .seg-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    questionsPerCard=+btn.dataset.val;
+    // Sync the header slider
+    const slider=document.getElementById('q-slider');
+    if(slider){slider.value=questionsPerCard;document.getElementById('q-val').textContent=questionsPerCard;}
+  });
+  // Also sync q-slider changes back to qpercard-ctrl
+  document.getElementById('q-slider').addEventListener('input',function(){
+    questionsPerCard=+this.value;
+    document.getElementById('q-val').textContent=questionsPerCard;
+    document.querySelectorAll('#qpercard-ctrl .seg-btn').forEach(b=>{
+      b.classList.toggle('active',+b.dataset.val===questionsPerCard);
+    });
+  });
+  // Yaku reference panel
+  document.getElementById('btn-open-yaku-panel').addEventListener('click',()=>{
+    document.getElementById('yaku-panel-overlay').classList.remove('hidden');
+  });
+  document.getElementById('btn-close-yaku-panel').addEventListener('click',()=>{
+    document.getElementById('yaku-panel-overlay').classList.add('hidden');
+  });
+  document.getElementById('yaku-panel-overlay').addEventListener('click',function(e){
+    if(e.target===this) this.classList.add('hidden');
+  });
+  // History panel
+  document.getElementById('btn-open-history').addEventListener('click',()=>{
+    document.getElementById('history-panel-overlay').classList.remove('hidden');
+  });
+  // Config panel
+  document.getElementById('btn-open-config').addEventListener('click',()=>{
+    refreshConfigPanel();
+    document.getElementById('config-panel-overlay').classList.remove('hidden');
+  });
+  document.getElementById('btn-close-config').addEventListener('click',()=>{
+    document.getElementById('config-panel-overlay').classList.add('hidden');
+  });
+  document.getElementById('config-panel-overlay').addEventListener('click',function(e){
+    if(e.target===this) this.classList.add('hidden');
+  });
+  // Pool size slider
+  const poolSlider=document.getElementById('cp-pool-size');
+  const poolLabel=document.getElementById('cp-pool-label');
+  poolSlider.addEventListener('input',function(){
+    sessionPoolSize=+this.value;
+    poolLabel.textContent=this.value+' cards';
+  });
+  // Focus slider
+  const focusSlider=document.getElementById('cp-focus');
+  const focusLabel=document.getElementById('cp-focus-label');
+  const FOCUS_DESC=['Mostly new — unseen cards first, review only when pool exhausted',
+                    'Balanced — mix of new and seen cards',
+                    'Mostly review — prioritise cards you have already seen'];
+  focusSlider.addEventListener('input',function(){
+    sessionFocus=+this.value;
+    focusLabel.textContent=FOCUS_DESC[sessionFocus];
+  });
+  // Ease toggle
+  document.getElementById('cp-show-ease').addEventListener('change',function(){
+    showEaseButtons=this.checked;
+  });
+  // Ease buttons
+  document.getElementById('ease-easy').addEventListener('click',()=>{
+    if(!G.pendingCapture) return;
+    const cardId=G.pendingCapture.ankiCardId;
+    const fc=G.pendingCapture.fieldCard, hc=G.pendingCapture.handCard, pl=G.pendingCapture.player;
+    // Record to Anki (ease 4 = Easy)
+    sessionStats.easyTapped++;
+    if(window.ankiBridge&&cardId) window.ankiBridge.recordAnswer(cardId,4);
+    document.getElementById('challenge-overlay').classList.add('hidden');
+    document.getElementById('ease-row').classList.add('hidden');
+    doCapture(fc,hc,pl);
+    log('Easy! Card skipped for this session.');
+  });
+  document.getElementById('ease-hard').addEventListener('click',()=>{
+    if(!G.pendingCapture) return;
+    const cardId=G.pendingCapture.ankiCardId;
+    const fc=G.pendingCapture.fieldCard, hc=G.pendingCapture.handCard, pl=G.pendingCapture.player;
+    sessionStats.hardTapped++;
+    if(window.ankiBridge&&cardId) window.ankiBridge.recordAnswer(cardId,2);
+    document.getElementById('challenge-overlay').classList.add('hidden');
+    document.getElementById('ease-row').classList.add('hidden');
+    doCapture(fc,hc,pl);
+    log('Hard — noted. Anki will show this sooner.');
+  });
+  document.getElementById('cp-save').addEventListener('click',()=>{
+    const qSel=document.getElementById('cp-q-field').value;
+    const aSel=document.getElementById('cp-a-field').value;
+    fieldConfig.questionField=qSel==='auto'?null:parseInt(qSel);
+    fieldConfig.answerField=aSel==='auto'?null:parseInt(aSel);
+    sessionFocus=+document.getElementById('cp-focus').value;
+    sessionPoolSize=+document.getElementById('cp-pool-size').value;
+    showEaseButtons=document.getElementById('cp-show-ease').checked;
+    document.getElementById('config-panel-overlay').classList.add('hidden');
+    if(window.ankiBridge){
+      window.ankiBridge.setFieldConfig(fieldConfig.questionField??-1,fieldConfig.answerField??-1);
+      window.ankiBridge.setSessionFocus(sessionFocus);
+      window.ankiBridge.setPoolSize(sessionPoolSize);
+    }
+    log('Config saved.');
+  });
+  document.getElementById('cp-reset').addEventListener('click',()=>{
+    fieldConfig={questionField:null,answerField:null};
+    if(window.ankiBridge) window.ankiBridge.setFieldConfig(-1,-1);
+    document.getElementById('cp-q-field').value='auto';
+    document.getElementById('cp-a-field').value='auto';
+    updateDetectedLabels();
+    log('Field config reset to auto-detect.');
+  });
+  document.getElementById('btn-close-history').addEventListener('click',()=>{
+    document.getElementById('history-panel-overlay').classList.add('hidden');
+  });
+  document.getElementById('history-panel-overlay').addEventListener('click',function(e){
+    if(e.target===this) this.classList.add('hidden');
+  });
+  // Appearance panel
+  document.getElementById('btn-open-appearance').addEventListener('click',()=>{
+    document.getElementById('appearance-panel-overlay').classList.remove('hidden');
+  });
+  document.getElementById('btn-close-appearance').addEventListener('click',()=>{
+    document.getElementById('appearance-panel-overlay').classList.add('hidden');
+  });
+  document.getElementById('appearance-panel-overlay').addEventListener('click',function(e){
+    if(e.target===this) this.classList.add('hidden');
+  });
+  // Theme switcher
+  const ALL_THEMES=['theme-nara','theme-hirosaki','theme-fukuoka','theme-kyoto','theme-sapporo'];
+  document.querySelectorAll('.theme-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const theme=btn.dataset.theme;
+      document.body.classList.remove(...ALL_THEMES);
+      if(theme!=='tokyo') document.body.classList.add('theme-'+theme);
+      document.querySelectorAll('.theme-btn').forEach(b=>b.classList.toggle('active',b===btn));
+    });
+  });
+}
+
+function lockGameSettings(){
+  gameSettingsLocked=true;
+  document.getElementById('toggle-hints-3-wrap').classList.add('locked');
+  document.getElementById('toggle-hints-ul-wrap').classList.add('locked');
+  // Also lock penalty mode during a round
+  document.getElementById('penalty-ctrl').style.pointerEvents='none';
+  document.getElementById('penalty-ctrl').style.opacity='0.5';
+}
+function unlockGameSettings(){
+  gameSettingsLocked=false;
+  document.getElementById('toggle-hints-3-wrap').classList.remove('locked');
+  document.getElementById('toggle-hints-ul-wrap').classList.remove('locked');
+  document.getElementById('penalty-ctrl').style.pointerEvents='';
+  document.getElementById('penalty-ctrl').style.opacity='';
+}
+
+// ── Deck ─────────────────────────────────────────────────────────────────────
+function buildDeck(){
+  const d=[];
+  for(let m=0;m<12;m++) for(let i=0;i<4;i++) d.push({month:m,pos:i,type:CARD_TYPES[m][i],id:m*4+i});
+  return d;
+}
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+
+// ── Card back SVG ─────────────────────────────────────────────────────────────
+function makeBackSVG(){
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox','0 0 76 110');svg.setAttribute('class','back-svg');
+  svg.innerHTML=`<rect width="76" height="110" rx="6" fill="#070c13"/>
+    <rect x="3" y="3" width="70" height="104" rx="5" fill="none" stroke="rgba(90,174,224,0.25)" stroke-width="0.8"/>
+    <rect x="7" y="7" width="62" height="96" rx="3" fill="none" stroke="rgba(90,174,224,0.12)" stroke-width="0.5"/>
+    <circle cx="38" cy="55" r="22" fill="none" stroke="rgba(90,174,224,0.18)" stroke-width="0.8"/>
+    <circle cx="38" cy="55" r="14" fill="none" stroke="rgba(90,174,224,0.1)" stroke-width="0.5"/>
+    <text x="38" y="61" text-anchor="middle" font-size="18" fill="rgba(90,174,224,0.2)" font-family="serif">花</text>
+    <line x1="8" y1="8" x2="68" y2="102" stroke="rgba(90,174,224,0.06)" stroke-width="0.8"/>
+    <line x1="68" y1="8" x2="8" y2="102" stroke="rgba(90,174,224,0.06)" stroke-width="0.8"/>
+    <circle cx="12" cy="12" r="3" fill="none" stroke="rgba(212,184,74,0.2)" stroke-width="0.6"/>
+    <circle cx="64" cy="12" r="3" fill="none" stroke="rgba(212,184,74,0.2)" stroke-width="0.6"/>
+    <circle cx="12" cy="98" r="3" fill="none" stroke="rgba(212,184,74,0.2)" stroke-width="0.6"/>
+    <circle cx="64" cy="98" r="3" fill="none" stroke="rgba(212,184,74,0.2)" stroke-width="0.6"/>`;
+  return svg;
+}
+
+// ── Card DOM ──────────────────────────────────────────────────────────────────
+function makeCard(card,opts={}){
+  const div=document.createElement('div');
+  div.className='card'; div.dataset.id=card.id;
+  if(opts.back){div.classList.add('back');div.appendChild(makeBackSVG());return div;}
+  const img=document.createElement('img'); img.className='front-img';
+  img.src=`cards/${card.month}_${card.pos}.svg`; img.alt=MONTH_DATA[card.month].themeJP;
+  const label=document.createElement('div'); label.className='card-label';
+  const jp=document.createElement('span'); jp.className='card-label-jp';
+  jp.textContent=MONTH_DATA[card.month].themeJP+' '+TYPE_JP[card.type];
+  const en=document.createElement('span'); en.className='card-label-en';
+  en.textContent=MONTH_DATA[card.month].theme+' · '+TYPE_EN[card.type];
+  label.appendChild(jp); label.appendChild(en);
+  const pip=document.createElement('div'); pip.className='card-type-pip';
+  pip.style.background=TYPE_COLOR[card.type]||'#445a6a';
+  img.onerror=()=>{img.remove();const em=document.createElement('div');em.className='card-emoji';em.textContent=EMOJI[card.month];div.insertBefore(em,label);};
+  div.appendChild(img); div.appendChild(pip); div.appendChild(label);
+  return div;
+}
+function makeMini(card,szClass){
+  const div=document.createElement('div'); div.className='mini '+szClass;
+  const img=document.createElement('img');
+  img.src=`cards/${card.month}_${card.pos}.svg`;
+  img.onerror=()=>{img.remove();div.style.fontSize='7px';div.style.display='flex';div.style.alignItems='center';div.style.justifyContent='center';div.style.color='var(--text3)';div.textContent=MONTH_DATA[card.month].themeJP[0];};
+  div.appendChild(img); return div;
+}
+
+// ── Captured by type (horizontal scroll) ──────────────────────────────────────
+function renderCaptured(capArray,containerId,szClass){
+  const el=document.getElementById(containerId); el.innerHTML='';
+  const groups={bright:[],ribbon:[],tane:[],kasu:[]};
+  capArray.forEach(c=>{if(groups[c.type])groups[c.type].push(c);});
+  TYPE_ORDER.forEach(t=>{
+    if(!groups[t].length) return;
+    const grp=document.createElement('div'); grp.className='cap-group';
+    const lbl=document.createElement('div'); lbl.className='cap-group-label';
+    lbl.textContent=TYPE_EN[t]+' '+TYPE_JP[t]+' ('+groups[t].length+')';
+    const row=document.createElement('div'); row.className='cap-cards';
+    groups[t].forEach(c=>row.appendChild(makeMini(c,szClass)));
+    grp.appendChild(lbl); grp.appendChild(row); el.appendChild(grp);
+  });
+}
+
+// ── Game state ────────────────────────────────────────────────────────────────
+// Scores: each player starts with 30, winner deducts earned pts from opponent
+let G={p1Score:30,p2Score:30,round:0,totalRounds:12,oya:'p1',gameActive:false};
+
+function startOya(){
+  setNewGameBtn(false); // mute during oya flip
+  document.getElementById('oya-overlay').classList.remove('hidden');
+  document.getElementById('oya-result').textContent='';
+  const btn=document.getElementById('oya-btn');
+  btn.textContent='Flip Cards · めくる'; btn.disabled=false; btn.onclick=doOyaFlip;
+  ['oya-your-card','oya-cpu-card'].forEach(id=>{
+    const c=document.getElementById(id); c.innerHTML=''; c.className='card back'; c.appendChild(makeBackSVG());
+  });
+}
+
+function doOyaFlip(){
+  const deck=shuffle(buildDeck());
+  const yourCard=deck[0], cpuCard=deck[1];
+  function flipEl(id,card){
+    const el=document.getElementById(id); el.innerHTML=''; el.className='card';
+    const img=document.createElement('img'); img.className='front-img';
+    img.src=`cards/${card.month}_${card.pos}.svg`;
+    img.onerror=()=>{img.remove();const em=document.createElement('div');em.className='card-emoji';em.textContent=EMOJI[card.month];el.appendChild(em);};
+    const label=document.createElement('div'); label.className='card-label';
+    const jp=document.createElement('span'); jp.className='card-label-jp'; jp.textContent=MONTH_DATA[card.month].themeJP;
+    label.appendChild(jp); el.appendChild(img); el.appendChild(label);
+  }
+  flipEl('oya-your-card',yourCard); flipEl('oya-cpu-card',cpuCard);
+  const resEl=document.getElementById('oya-result');
+  const btn=document.getElementById('oya-btn'); btn.disabled=true;
+  if(yourCard.month===cpuCard.month){
+    resEl.textContent='Tie! Draw again. · 引き分け';
+    btn.textContent='Redraw · もう一度'; btn.disabled=false; btn.onclick=doOyaFlip;
+  } else {
+    const youFirst=yourCard.month<cpuCard.month;
+    resEl.textContent=youFirst?'You go first as Dealer (親)! · あなたが親！':'CPU goes first as Dealer (親)! · 相手が親！';
+    btn.textContent='Start Game · ゲーム開始'; btn.disabled=false;
+    btn.onclick=()=>{document.getElementById('oya-overlay').classList.add('hidden');startRound(youFirst?'p1':'p2',youFirst?'p1':'p2');};
+  }
+}
+document.getElementById('oya-btn').onclick=doOyaFlip;
+
+function newGame(){
+  roundHistory=[];
+  renderHistory();
+  resetSessionStats();
+  // Notify Python to reset the vocab session
+  if(window.ankiBridge) window.ankiBridge.newGameStarted();
+  const startPts=gameMode==='down'?30:0;
+  G={p1Score:startPts,p2Score:startPts,round:0,totalRounds:12,oya:'p1',gameActive:false,gameMode:gameMode};
+  document.getElementById('p1-pts').textContent=String(startPts);
+  document.getElementById('p2-pts').textContent=String(startPts);
+  startOya();
+}
+
+function setNewGameBtn(gameOver){
+  const btn=document.getElementById('btn-new');
+  if(gameOver){btn.classList.add('game-over');}else{btn.classList.remove('game-over');}
+}
+
+// ── Deal & instant-win check ──────────────────────────────────────────────────
+function startRound(firstTurn,oyaThisRound){
+  G.round=(G.round||0)+1;
+  G.oya=oyaThisRound||firstTurn;
+  G.gameActive=true;
+  setNewGameBtn(false);
+
+  const raw=shuffle(buildDeck());
+  G.p1Hand=raw.slice(0,8);
+  G.p2Hand=raw.slice(8,16);
+  G.field=raw.slice(16,24);
+  G.deck=raw.slice(24);
+  G.p1Cap=[]; G.p2Cap=[];
+  G.turn=firstTurn; G.phase='select-hand';
+  G.selected=null; G.drawnCard=null;
+  G.p1CalledKoiKoi=false; G.p2CalledKoiKoi=false;
+  G.p1YakuSnapshot=[]; G.p2YakuSnapshot=[];
+  G.pendingCapture=null; G.pendingQCount=0;
+
+  // Check instant wins (Teshi/Kuttsuki) for player hand
+  const instantResult=checkInstantWin(G.p1Hand,'p1')||checkInstantWin(G.p2Hand,'p2')||checkInstantWin(G.field,'field');
+  if(instantResult){
+    setBtns(false);
+  lockGameSettings();
+  hintsRemaining=hintsMode==='3'?3:(hintsMode==='unlimited'?9999:0);
+    if(instantResult==='field'){
+      showRoundOverlay('Void Deal · 無効','Field was dealt an instant-win combo.\nRedealing...','Redeal',()=>startRound(firstTurn,oyaThisRound));
+      return;
+    }
+    const winner=instantResult;
+    const loser=winner==='p1'?'p2':'p1';
+    const winName=winner==='p1'?'You':'CPU';
+    if(G.gameMode==='down'){G[loser+'Score']-=6; G[winner+'Score']+=6;} else {G[winner+'Score']+=6;}
+    showRoundOverlay('Instant Win! · 即勝',`${winName} was dealt an instant-win hand!\n(Teshi or Kuttsuki: 6 pts)\n\nYou: ${G.p1Score} · CPU: ${G.p2Score}`,nextBtnLabel(),()=>nextRound(winner,winner));
+    render(); return;
+  }
+
+  setBtns(false);
+  log('Your turn — click a card from your hand · 手札を選んでください');
+  setPhase('Round '+G.round+'/'+G.totalRounds+' · 第'+G.round+'局 — '+(firstTurn==='p1'?'Your turn':'CPU turn'));
+  render();
+  if(firstTurn==='p2') setTimeout(cpuTurn,cpuSpeed);
+}
+
+function checkInstantWin(hand,player){
+  if(player==='field'){
+    // If field has Teshi or Kuttsuki, redeal
+    const months=hand.map(c=>c.month);
+    const monthCounts={};
+    months.forEach(m=>{monthCounts[m]=(monthCounts[m]||0)+1;});
+    const vals=Object.values(monthCounts);
+    if(vals.some(v=>v>=4)) return 'field';
+    const pairs=vals.filter(v=>v>=2).length;
+    if(pairs>=4) return 'field';
+    return null;
+  }
+  const months=hand.map(c=>c.month);
+  const monthCounts={};
+  months.forEach(m=>{monthCounts[m]=(monthCounts[m]||0)+1;});
+  const vals=Object.values(monthCounts);
+  // Teshi: 4 of same suit
+  if(vals.some(v=>v>=4)) return player;
+  // Kuttsuki: 4 pairs
+  const pairs=vals.filter(v=>v>=2).length;
+  if(pairs>=4) return player;
+  return null;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render(){renderField();renderHand();renderCaptured(G.p1Cap,'p1-cap','sz-p1');renderCaptured(G.p2Cap,'p2-cap','sz-cpu');renderScores();renderYaku();}
+
+function renderHand(){
+  const el=document.getElementById('p1-hand'); el.innerHTML='';
+  const fieldMonths=new Set(G.field.map(c=>c.month));
+  G.p1Hand.forEach(card=>{
+    const c=makeCard(card);
+    const canAct=G.turn==='p1'&&['select-hand','select-field','discard-confirm'].includes(G.phase);
+    if(canAct) c.addEventListener('click',()=>onHandClick(card));
+    if(G.selected&&G.selected.id===card.id) c.classList.add('selected');
+    c.draggable=true;
+    c.addEventListener('dragstart',e=>{
+      if(!G.selected||G.selected.id!==card.id){
+        G.selected=card;
+        G.phase=fieldMonths.has(card.month)?'select-field':'discard-confirm';
+        render();
+      }
+      e.dataTransfer.setData('text/plain',String(card.id));
+    });
+    el.appendChild(c);
+  });
+}
+
+function renderField(){
+  const el=document.getElementById('field'); el.innerHTML='';
+  el.ondragover=e=>{e.preventDefault();el.classList.add('drag-over');};
+  el.ondragleave=()=>el.classList.remove('drag-over');
+  el.ondrop=e=>{e.preventDefault();el.classList.remove('drag-over');if(G.selected&&G.phase==='discard-confirm')discardSelected();};
+  el.addEventListener('click',e=>{if(e.target===el&&G.selected&&G.phase==='discard-confirm')discardSelected();});
+
+  // No-match = field cards whose month doesn't appear in player hand
+  const handMonths=new Set(G.p1Hand.map(c=>c.month));
+  const isPlayerTurn=G.turn==='p1';
+  G.field.forEach(card=>{
+    const c=makeCard(card);
+    // Dim if: player's turn, not in deck-pick, and no hand card matches this month
+    if(isPlayerTurn&&G.phase!=='deck-pick'&&!handMonths.has(card.month)) c.classList.add('no-match');
+    // Green glow for matches
+    if(G.selected&&card.month===G.selected.month) c.classList.add('match-hint');
+    if(G.phase==='deck-pick'&&G.drawnCard&&card.month===G.drawnCard.month) c.classList.add('match-hint');
+    c.addEventListener('click',()=>onFieldClick(card));
+    if(G.newFieldCard===card.id) c.classList.add('anim-flip');
+    el.appendChild(c);
+  });
+  if(G.phase==='deck-pick'&&G.drawnCard){
+    const dc=makeCard(G.drawnCard); dc.classList.add('deck-drawn'); dc.style.pointerEvents='none';
+    el.appendChild(dc);
+  }
+}
+
+function renderScores(){
+  document.getElementById('p1-pts').textContent=G.p1Score;
+  document.getElementById('p2-pts').textContent=G.p2Score;
+  document.getElementById('p1-box').classList.toggle('active',G.turn==='p1');
+  document.getElementById('p2-box').classList.toggle('active',G.turn==='p2');
+  document.getElementById('p1-name').textContent='You · あなた'+(G.p1CalledKoiKoi?' [Koi-Koi!]':'')+(G.oya==='p1'?' ★':'');
+  document.getElementById('p2-name').textContent='CPU · 相手'+(G.p2CalledKoiKoi?' [Koi-Koi!]':'')+(G.oya==='p2'?' ★':'');
+}
+
+function renderYaku(){
+  const el=document.getElementById('yaku-grid'); el.innerHTML='';
+  const earned=checkYaku(G.p1Cap);
+  YAKU_DEFS.forEach(y=>{
+    const isEarned=earned.includes(y.name);
+    const c=document.createElement('div'); c.className='yaku-card'+(isEarned?' earned':'');
+    const nm=document.createElement('span'); nm.className='yaku-name'; nm.textContent=y.name;
+    const jp=document.createElement('span'); jp.className='yaku-jp'; jp.textContent=y.jp+' — '+y.desc;
+    const pt=document.createElement('span'); pt.className='yaku-pts';
+    pt.textContent=(isEarned?'✦ ':'')+( isEarned ? yakuPtsDisplay(y.name,G.p1Cap) : (y.pts||'var') )+' pts';
+    c.appendChild(nm); c.appendChild(jp); c.appendChild(pt); el.appendChild(c);
+  });
+}
+
+function log(msg){document.getElementById('log').textContent=msg;}
+function setPhase(msg){document.getElementById('phase-label').textContent=msg;}
+function setBtns(on){
+  document.getElementById('btn-koi').disabled=!on;
+  document.getElementById('btn-stop').disabled=!on;
+  document.getElementById('btn-stop').classList.toggle('yaku-ready',on);
+}
+
+// ── Interactions ──────────────────────────────────────────────────────────────
+function onHandClick(card){
+  if(G.turn!=='p1') return;
+  if(G.selected&&G.selected.id===card.id){
+    G.selected=null; G.phase='select-hand';
+    log('Deselected — pick another card · 選択を解除'); render(); return;
+  }
+  G.selected=card;
+  const matches=G.field.filter(c=>c.month===card.month);
+  G.phase=matches.length?'select-field':'discard-confirm';
+  log(matches.length?'Match found — click a glowing card to capture · 一致あり':'No match — drag/click field to discard, click card to cancel · 一致なし');
+  render();
+}
+
+function onFieldClick(card){
+  if(G.phase==='discard-confirm'&&G.selected){discardSelected();return;}
+  if(G.phase==='deck-pick'){
+    if(!G.drawnCard||card.month!==G.drawnCard.month){log('Pick a glowing card! · 一致する札を選んでください');return;}
+    const drawn=G.drawnCard; G.drawnCard=null;
+    G[G.turn+'Cap'].push(drawn,card);
+    G.field=G.field.filter(c=>c.id!==card.id);
+    log('Captured from deck! · 山札から取りました');
+    G.phase='post-draw'; render(); afterDraw(); return;
+  }
+  if(G.phase!=='select-field'||!G.selected) return;
+  if(card.month!==G.selected.month){log('That card does not match — pick a glowing card · 一致しません');return;}
+  triggerCapture(card,G.selected,'p1');
+}
+
+function discardSelected(){
+  if(!G.selected) return;
+  G.field.push(G.selected);
+  G.p1Hand=G.p1Hand.filter(c=>c.id!==G.selected.id);
+  G.selected=null; G.phase='draw';
+  log('Discarded to field · 場に捨てました');
+  render(); setTimeout(()=>animatedDraw('p1'),400);
+}
+
+// ── Vocab challenge ───────────────────────────────────────────────────────────
+function triggerCapture(fieldCard,handCard,player){
+  if(questionsPerCard===0||!window.ankiBridge){doCapture(fieldCard,handCard,player);return;}
+  if(penaltyMode==='learning'){
+    G.pendingCapture={fieldCard,handCard,player,retryCount:0,isLearning:true};
+    G.pendingQCount=questionsPerCard; askNextQuestion();
+    return;
+  }
+  G.pendingCapture={fieldCard,handCard,player,retryCount:0}; G.pendingQCount=questionsPerCard; askNextQuestion();
+}
+function askNextQuestion(){
+  const {fieldCard,handCard,player}=G.pendingCapture;
+  if(G.pendingQCount<=0){doCapture(fieldCard,handCard,player);return;}
+  G.pendingQCount--;
+  if(!window.ankiBridge){doCapture(fieldCard,handCard,player);return;}
+  window.ankiBridge.requestChallenge(); window._challengePending=G.pendingCapture;
+  log('Fetching vocab challenge...');
+}
+
+// Store current question data for hint / show-choices use
+let _currentQuestion=null;
+
+function _onChallengeReady(jsonStr){
+
+  const data=JSON.parse(jsonStr);
+  const {fieldCard,handCard,player}=window._challengePending||{};
+  if(data.error||!data.question){
+    if(data.error==='not_enough_cards'){
+      log('Not enough cards in deck for questions (need 4+). Capturing without quiz.');
+    } else if(data.error){
+      log('Vocab error: '+data.error+' — open Config to check field settings.');
+    }
+    doCapture(fieldCard,handCard,player);return;
+  }
+
+  _currentQuestion=data; // store for hint use
+  // Store card_id on pendingCapture so we can record the answer
+  if(G.pendingCapture&&data.card_id) G.pendingCapture.ankiCardId=data.card_id;
+
+  document.getElementById('ch-question').textContent=data.question;
+
+  // Stake text
+  const rc=(G.pendingCapture&&G.pendingCapture.retryCount)||0;
+  let stakeText='';
+  if(penaltyMode==='learning') stakeText='Learning mode — you capture either way. No penalty!';
+  else if(penaltyMode==='full') stakeText='Correct → Capture   ✦   Wrong → your card goes to field';
+  else if(penaltyMode==='retry'){
+    if(rc===0) stakeText='Correct → Capture   ✦   Wrong → 2 more chances';
+    else if(rc===1) stakeText='Strike 2 — Correct → Capture   ✦   Wrong → 1 last chance';
+    else stakeText='Strike 3 — last chance! Wrong → both cards to field';
+  } else if(penaltyMode==='duel') stakeText='Correct → Capture   ✦   Wrong → card duel!';
+  if(questionsPerCard>1) stakeText='Q'+(questionsPerCard-G.pendingQCount)+'/'+questionsPerCard+' · '+stakeText;
+  document.getElementById('ch-stake').textContent=stakeText;
+
+  // Hint button
+  const hintBtn=document.getElementById('btn-hint');
+  const hintCountEl=document.getElementById('hint-count');
+  if(hintsMode==='none'){
+    hintBtn.style.display='none'; hintCountEl.style.display='none';
+  } else {
+    hintBtn.style.display=''; hintCountEl.style.display='';
+    hintBtn.disabled=(hintsMode==='3'&&hintsRemaining<=0);
+    hintCountEl.textContent=hintsMode==='unlimited'?'∞ hints':hintsRemaining+' hint'+(hintsRemaining!==1?'s':'')+' left';
+    hintBtn.onclick=()=>useHint(data.choices,data.answer);
+  }
+
+  // Build choices (possibly hidden)
+  renderChoices(data,fieldCard,handCard,player);
+  document.getElementById('challenge-overlay').classList.remove('hidden');
+  document.getElementById('ease-row').classList.toggle('hidden',!showEaseButtons);
+}
+
+function renderChoices(data,fieldCard,handCard,player){
+  const choicesEl=document.getElementById('ch-choices');
+  const showBtn=document.getElementById('btn-show-choices');
+  choicesEl.innerHTML='';
+
+  if(hideChoices){
+    showBtn.style.display='block';
+    choicesEl.style.display='none';
+    showBtn.onclick=()=>{
+      showBtn.style.display='none';
+      choicesEl.style.display='flex';
+    };
+  } else {
+    showBtn.style.display='none';
+    choicesEl.style.display='flex';
+  }
+
+  data.choices.forEach(choice=>{
+    const btn=document.createElement('button'); btn.className='choice-btn'; btn.textContent=choice;
+    btn.onclick=()=>onChoiceClick(btn,choice,data.answer,fieldCard,handCard,player,choicesEl,data);
+    choicesEl.appendChild(btn);
+  });
+}
+
+function useHint(choices,correct){
+  if(hintsRemaining<=0&&hintsMode!=='unlimited') return;
+  if(G.pendingCapture) G.pendingCapture.hintUsed=true;
+  sessionStats.hintsUsed++;
+  // Reveal the correct answer by highlighting it
+  const allBtns=[...document.querySelectorAll('#ch-choices .choice-btn')];
+  // If choices are hidden, show them first
+  const choicesEl=document.getElementById('ch-choices');
+  const showBtn=document.getElementById('btn-show-choices');
+  if(choicesEl.style.display==='none'){
+    showBtn.style.display='none';
+    choicesEl.style.display='flex';
+  }
+  // Highlight the correct answer
+  allBtns.forEach(b=>{
+    if(b.textContent===correct){
+      b.style.border='1.5px solid var(--gold)';
+      b.style.color='var(--gold)';
+      b.style.background='rgba(212,184,74,0.1)';
+    }
+  });
+  if(hintsMode==='3') hintsRemaining--;
+  const hintBtn=document.getElementById('btn-hint');
+  const hintCountEl=document.getElementById('hint-count');
+  hintBtn.disabled=true; // one hint per question
+  hintCountEl.textContent=hintsMode==='unlimited'?'✓ Answer shown':hintsRemaining+' hint'+(hintsRemaining!==1?'s':'')+' left';
+}
+
+function onChoiceClick(btn,choice,correct,fieldCard,handCard,player,choicesEl,data){
+  choicesEl.querySelectorAll('.choice-btn').forEach(b=>b.onclick=null);
+  document.getElementById('btn-hint').onclick=null;
+  document.getElementById('btn-show-choices').onclick=null;
+
+  if(choice===correct){
+    btn.classList.add('correct');
+    // Track session stats
+    sessionStats.cardsAnswered++;
+    if(!G.pendingCapture.hintUsed) sessionStats.correctFirst++;
+    // Record to Anki: ease 2 (Hard) if hint used, else 3 (Good)
+    if(window.ankiBridge&&G.pendingCapture&&G.pendingCapture.ankiCardId){
+      const ease=G.pendingCapture.hintUsed?2:3;
+      window.ankiBridge.recordAnswer(G.pendingCapture.ankiCardId,ease);
+    }
+    setTimeout(()=>{
+      document.getElementById('challenge-overlay').classList.add('hidden');
+      document.getElementById('ease-row').classList.add('hidden');
+      if(G.pendingQCount>0) askNextQuestion();
+      else doCapture(fieldCard,handCard,player);
+    },800);
+  } else {
+    // Wrong answer
+    btn.classList.add('wrong');
+    choicesEl.querySelectorAll('.choice-btn').forEach(b=>{if(b.textContent===correct)b.classList.add('correct');});
+    const stakeEl=document.getElementById('ch-stake');
+
+    sessionStats.cardsAnswered++;
+    sessionStats.wrongAnswers++;
+    if(penaltyMode==='learning'){
+      // Record to Anki as Again (ease 1) so the card comes back for review
+      if(window.ankiBridge&&G.pendingCapture&&G.pendingCapture.ankiCardId)
+        window.ankiBridge.recordAnswer(G.pendingCapture.ankiCardId,1);
+      stakeEl.textContent='The answer was: '+correct+' — capturing anyway (Learning mode)';
+      setTimeout(()=>{
+        document.getElementById('challenge-overlay').classList.add('hidden');
+        doCapture(fieldCard,handCard,player);
+      },1400);
+    } else if(penaltyMode==='full'){
+      stakeEl.textContent='Incorrect. The answer was: '+correct;
+      setTimeout(()=>{
+        document.getElementById('challenge-overlay').classList.add('hidden');
+        wrongFinalDiscard(fieldCard,handCard,player);
+      },1600);
+
+    } else if(penaltyMode==='retry'){
+      const rc=(G.pendingCapture.retryCount||0);
+      if(rc<2){
+        G.pendingCapture.retryCount=rc+1;
+        stakeEl.textContent='Incorrect. The answer was: '+correct+'. New question coming... (Strike '+(rc+1)+'/3)';
+        setTimeout(()=>{
+          // fetch fresh question for retry
+          if(!window.ankiBridge){
+            document.getElementById('challenge-overlay').classList.add('hidden');
+            wrongFinalBoth(fieldCard,handCard,player);
+          } else {
+            window.ankiBridge.requestChallenge();
+            window._challengePending=G.pendingCapture;
+          }
+        },1800);
+      } else {
+        stakeEl.textContent='Strike 3! The answer was: '+correct+'. Both cards lost.';
+        setTimeout(()=>{
+          document.getElementById('challenge-overlay').classList.add('hidden');
+          wrongFinalBoth(fieldCard,handCard,player);
+        },1800);
+      }
+
+    } else if(penaltyMode==='duel'){
+      stakeEl.textContent='Incorrect! The answer was: '+correct+'. Time to duel...';
+      setTimeout(()=>{
+        document.getElementById('challenge-overlay').classList.add('hidden');
+        startDuel(fieldCard,handCard,player);
+      },1600);
+    }
+  }
+}
+
+// Wrong outcomes
+function wrongFinalDiscard(fieldCard,handCard,player){
+  if(window.ankiBridge&&G.pendingCapture&&G.pendingCapture.ankiCardId)
+    window.ankiBridge.recordAnswer(G.pendingCapture.ankiCardId,1); // ease 1=Again
+  G.field.push(handCard);
+  G.p1Hand=G.p1Hand.filter(c=>c.id!==handCard.id);
+  G.selected=null; G.phase='draw';
+  log('Incorrect — your card goes to the field.');
+  render(); setTimeout(()=>animatedDraw('p1'),400);
+}
+function wrongFinalBoth(fieldCard,handCard,player){
+  if(window.ankiBridge&&G.pendingCapture&&G.pendingCapture.ankiCardId)
+    window.ankiBridge.recordAnswer(G.pendingCapture.ankiCardId,1);
+  G.field.push(handCard);
+  G.p1Hand=G.p1Hand.filter(c=>c.id!==handCard.id);
+  G.selected=null; G.phase='draw';
+  log('Both cards go to the field!');
+  render(); setTimeout(()=>animatedDraw('p1'),400);
+}
+
+// ── Duel Mode ─────────────────────────────────────────────────────────────────
+function startDuel(fieldCard,handCard,player){
+  const deck=shuffle(buildDeck());
+  const yourCard=deck[0], cpuCard=deck[1];
+
+  // Show duel overlay with backs first
+  ['duel-your-card','duel-cpu-card'].forEach(id=>{
+    const el=document.getElementById(id); el.innerHTML=''; el.className='card back';
+    el.appendChild(makeBackSVG());
+  });
+  document.getElementById('duel-result').textContent='';
+  document.getElementById('duel-overlay').classList.remove('hidden');
+
+  const btn=document.getElementById('duel-btn');
+  btn.textContent='Draw Cards · めくる'; btn.disabled=false;
+  btn.onclick=()=>{
+    btn.disabled=true;
+    // Flip cards
+    function flipDuel(id,card){
+      const el=document.getElementById(id); el.innerHTML=''; el.className='card';
+      const img=document.createElement('img'); img.className='front-img';
+      img.src=`cards/${card.month}_${card.pos}.svg`;
+      img.onerror=()=>{img.remove();const em=document.createElement('div');em.className='card-emoji';em.textContent=EMOJI[card.month];el.appendChild(em);};
+      const label=document.createElement('div'); label.className='card-label';
+      const jp=document.createElement('span'); jp.className='card-label-jp'; jp.textContent=MONTH_DATA[card.month].themeJP;
+      const en=document.createElement('span'); en.className='card-label-en'; en.textContent=MONTH_DATA[card.month].theme;
+      label.appendChild(jp); label.appendChild(en);
+      el.appendChild(img); el.appendChild(label);
+    }
+    flipDuel('duel-your-card',yourCard);
+    flipDuel('duel-cpu-card',cpuCard);
+
+    const resEl=document.getElementById('duel-result');
+    setTimeout(()=>{
+      if(yourCard.month===cpuCard.month){
+        // Tie: reduel
+        resEl.textContent='Tie! Draw again...';
+        btn.textContent='Redraw · もう一度'; btn.disabled=false;
+        btn.onclick=()=>startDuel(fieldCard,handCard,player);
+      } else if(yourCard.month<cpuCard.month){
+        resEl.textContent='You win the duel! ('+MONTH_DATA[yourCard.month].theme+' < '+MONTH_DATA[cpuCard.month].theme+') — Captured!';
+        btn.textContent='Collect'; btn.disabled=false;
+        btn.onclick=()=>{
+          document.getElementById('duel-overlay').classList.add('hidden');
+          doCapture(fieldCard,handCard,player);
+        };
+      } else {
+        resEl.textContent='CPU wins the duel! ('+MONTH_DATA[cpuCard.month].theme+' < '+MONTH_DATA[yourCard.month].theme+') — Cards go to field.';
+        btn.textContent='Continue'; btn.disabled=false;
+        btn.onclick=()=>{
+          document.getElementById('duel-overlay').classList.add('hidden');
+          wrongFinalDiscard(fieldCard,handCard,player);
+        };
+      }
+    },700);
+  };
+}
+function doCapture(fieldCard,handCard,player){
+  G[player+'Cap'].push(fieldCard,handCard);
+  G.field=G.field.filter(c=>c.id!==fieldCard.id);
+  if(player==='p1')G.p1Hand=G.p1Hand.filter(c=>c.id!==handCard.id);
+  else G.p2Hand=G.p2Hand.filter(c=>c.id!==handCard.id);
+  G.selected=null; G.phase='draw';
+  log('Captured! Drawing from deck... · 取りました');
+  render(); setTimeout(()=>animatedDraw(player),400);
+}
+
+// ── Animated deck draw ────────────────────────────────────────────────────────
+function animatedDraw(player){
+  if(G.deck.length===0){afterDraw();return;}
+  const drawn=G.deck.pop();
+  const matches=G.field.filter(c=>c.month===drawn.month);
+  const tempCard=makeCard(drawn); tempCard.classList.add('anim-draw');
+  const fieldEl=document.getElementById('field'); fieldEl.appendChild(tempCard);
+  setTimeout(()=>{if(fieldEl.contains(tempCard))fieldEl.removeChild(tempCard);resolveDraw(drawn,matches,player);},520);
+}
+function resolveDraw(drawn,matches,player){
+  const cap=player+'Cap';
+  if(matches.length===0){
+    G.field.push(drawn); G.newFieldCard=drawn.id;
+    log('Deck card placed on field ('+MONTH_DATA[drawn.month].theme+') · 山札: 一致なし');
+    render(); G.newFieldCard=null; afterDraw();
+  } else if(matches.length===2&&player==='p1'){
+    G.drawnCard=drawn; G.phase='deck-pick';
+    log('Deck card matches 2 — choose which to capture! · 山札が2枚に一致！');
+    render();
+  } else {
+    let toCapture;
+    if(matches.length===2){toCapture=[matches.sort((a,b)=>TYPE_ORDER.indexOf(a.type)-TYPE_ORDER.indexOf(b.type))[0]];}
+    else{toCapture=matches;}
+    toCapture.forEach(m=>{G[cap].push(m);G.field=G.field.filter(c=>c.id!==m.id);});
+    G[cap].push(drawn);
+    log('Deck card captured'+(matches.length===3?' (all 4!)':' ('+MONTH_DATA[drawn.month].theme+')')+'· 山札から一致');
+    render(); afterDraw();
+  }
+}
+
+// ── After draw ────────────────────────────────────────────────────────────────
+function afterDraw(){
+  const cap=G.turn+'Cap';
+  const yakuNow=checkYaku(G[cap]);
+  const snapshot=G.turn==='p1'?G.p1YakuSnapshot:G.p2YakuSnapshot;
+  const newYaku=yakuNow.filter(y=>!snapshot.includes(y));
+  if(G.turn==='p1'){
+    renderYaku();
+    if(newYaku.length>0){
+      const pts=scoreYaku(yakuNow,G.p1Cap);
+      showYakuBanner(newYaku,pts);
+      // Auto-stop if no cards left to play (can't koi-koi anyway)
+      if(G.p1Hand.length===0&&G.deck.length===0){
+        log('Yaku! '+newYaku.join(', ')+' ('+pts+' pts) — Auto-stopping (no cards left).');
+        setBtns(false); G.phase='koi-decision';
+        setTimeout(()=>endRound('p1'),1800); return;
+      }
+      log('Yaku! '+newYaku.join(', ')+' ('+pts+' pts) — Koi-Koi to continue, or Stop to collect');
+      setBtns(true); G.phase='koi-decision'; return;
+    }
+    // If hand and deck are both empty, end round regardless of yaku state
+    if(G.p1Hand.length===0&&G.deck.length===0){render();endRound();return;}
+    // Check both hands empty
+    if(G.p1Hand.length===0&&G.p2Hand.length===0){render();endRound();return;}
+    if(G.p2Hand.length===0){
+      // CPU has no cards — if deck also empty, end round; otherwise skip CPU turn back to player
+      if(G.deck.length===0){render();endRound();return;}
+      // CPU has no hand cards but deck remains — CPU only draws (no hand play)
+      G.phase='select-hand'; G.turn='p2';
+      setPhase('Round '+G.round+'/'+G.totalRounds+' — CPU drawing from deck...');
+      render(); setTimeout(cpuDrawOnly,cpuSpeed);
+    } else {
+      G.phase='select-hand'; G.turn='p2';
+      setPhase('Round '+G.round+'/'+G.totalRounds+' — CPU turn · 相手の番');
+      render(); setTimeout(cpuTurn,cpuSpeed);
+    }
+  } else {
+    if(newYaku.length>0){G.p2YakuSnapshot=yakuNow;cpuKoiKoiDecision(yakuNow);}
+    else endCpuTurn();
+  }
+}
+function endCpuTurn(){
+  // Both hands empty → end round
+  if(G.p1Hand.length===0&&G.p2Hand.length===0){render();endRound();return;}
+  // Deck empty and both hands empty → end round
+  if(G.deck.length===0&&G.p1Hand.length===0){render();endRound();return;}
+  // Player has no cards left — if deck also empty, end; otherwise skip player's hand play
+  if(G.p1Hand.length===0){
+    if(G.deck.length===0){render();endRound();return;}
+    // Player can't play from hand but game continues — skip back to CPU
+    G.turn='p2'; G.phase='select-hand';
+    setPhase('Round '+G.round+'/'+G.totalRounds+' — CPU turn (your hand is empty)');
+    log('Your hand is empty — CPU continues.');
+    render(); setTimeout(cpuTurn,cpuSpeed);
+    return;
+  }
+  G.turn='p1'; G.phase='select-hand';
+  setPhase('Round '+G.round+'/'+G.totalRounds+' — Your turn · あなたの番');
+  log('Your turn! · あなたの番');
+  render();
+}
+// ── CPU turn ──────────────────────────────────────────────────────────────────
+// ── CPU difficulty helpers ────────────────────────────────────────────────────
+function cpuChooseCard(){
+  // Returns {played, fieldMatch} based on difficulty
+  if(G.p2Hand.length===0) return {played:null,fieldMatch:null};
+
+  if(cpuDifficulty==='easy'){
+    // Easy: pick a random hand card, match if possible but don't prioritise
+    const shuffled=[...G.p2Hand].sort(()=>Math.random()-0.5);
+    for(const hc of shuffled){
+      const fm=G.field.find(c=>c.month===hc.month);
+      if(fm) return {played:hc,fieldMatch:fm};
+    }
+    return {played:shuffled[0],fieldMatch:null};
+  }
+
+  if(cpuDifficulty==='normal'){
+    // Normal: greedy — prefer bright > ribbon > tane > kasu
+    for(const ptype of TYPE_ORDER){
+      for(const hc of G.p2Hand){
+        if(hc.type!==ptype) continue;
+        const fm=G.field.find(c=>c.month===hc.month);
+        if(fm) return {played:hc,fieldMatch:fm};
+      }
+    }
+    return {played:G.p2Hand[0],fieldMatch:null};
+  }
+
+  // Hard: find which yaku CPU is closest to, prioritise cards that advance them
+  // Score each hand card by how much it advances yaku progress
+  function yakuProgress(cap){
+    // How many yaku is CPU close to? Returns a score
+    let score=0;
+    const testCap=[...cap];
+    YAKU_DEFS.forEach(y=>{if(y.check(testCap)) score+=y.pts||1;});
+    return score;
+  }
+
+  let bestPlayed=null,bestMatch=null,bestScore=-1;
+  for(const hc of G.p2Hand){
+    const fm=G.field.find(c=>c.month===hc.month);
+    const simCap=fm?[...G.p2Cap,hc,fm]:[...G.p2Cap];
+    const score=yakuProgress(simCap)
+      +(fm?TYPE_ORDER.indexOf(fm.type)*-1+4:0) // bonus for capturing high-value
+      +(hc.type==='bright'?3:hc.type==='ribbon'?2:hc.type==='tane'?1:0);
+    if(score>bestScore){bestScore=score;bestPlayed=hc;bestMatch=fm||null;}
+  }
+  // Also try to deny player: check if any field card would help player form yaku
+  // (Hard only: if not capturing anything useful, discard a card the player needs)
+  if(!bestMatch){
+    const playerYaku=checkYaku(G.p1Cap);
+    const playerClose=YAKU_DEFS.filter(y=>!playerYaku.includes(y.name)&&y.check([...G.p1Cap,...G.field]));
+    if(playerClose.length>0){
+      // Try to discard a card whose month the player has in hand
+      const p1Months=new Set(G.p1Hand.map(c=>c.month));
+      const denialCard=G.p2Hand.find(hc=>p1Months.has(hc.month)&&!G.field.find(c=>c.month===hc.month));
+      if(denialCard) return {played:denialCard,fieldMatch:null};
+    }
+  }
+  return {played:bestPlayed||G.p2Hand[0],fieldMatch:bestMatch};
+}
+
+function cpuKoiKoiDecision(yakuNames){
+  const pts=scoreYaku(yakuNames,G.p2Cap);
+  // Easy: never calls koi-koi
+  // Normal: stop at 7+, or if player called koi-koi
+  // Hard: more aggressive — calls koi-koi unless very high pts or player called
+  let shouldStop;
+  if(cpuDifficulty==='easy') shouldStop=true;
+  else if(cpuDifficulty==='normal') shouldStop=(pts>=7||G.p1CalledKoiKoi);
+  else shouldStop=(pts>=10||G.p1CalledKoiKoi); // Hard calls koi-koi more often
+  if(shouldStop){log('CPU stops and collects! · 相手がやめ');setTimeout(()=>endRound('p2'),cpuSpeed);}
+  else{G.p2CalledKoiKoi=true;showKoiBanner();render();setTimeout(endCpuTurn,cpuSpeed);}
+}
+
+function cpuTurn(){
+  if(G.turn!=='p2') return;
+  if(G.p2Hand.length===0){cpuDrawOnly();return;}
+  const {played,fieldMatch}=cpuChooseCard();
+  if(!played){cpuDrawOnly();return;}
+  if(fieldMatch){
+    G.p2Cap.push(played,fieldMatch); G.field=G.field.filter(c=>c.id!==fieldMatch.id);
+    log('CPU captures '+MONTH_DATA[played.month].theme+' · 相手が取りました');
+  } else {
+    G.field.push(played);
+    log('CPU discards '+MONTH_DATA[played.month].theme+' · 相手が捨てました');
+  }
+  G.p2Hand=G.p2Hand.filter(c=>c.id!==played.id);
+  render();
+  setTimeout(()=>animatedDraw('p2'),Math.round(cpuSpeed*0.65));
+}
+
+// CPU draw-only turn (when CPU hand is empty but deck remains)
+function cpuDrawOnly(){
+  if(G.deck.length===0){
+    // Nothing left to do — end round
+    render(); endRound(); return;
+  }
+  log('CPU draws from deck...');
+  setTimeout(()=>animatedDraw('p2'),Math.round(cpuSpeed*0.65));
+}
+
+// ── Round end — full correct scoring ─────────────────────────────────────────
+function endRound(forcedWinner){
+  setBtns(false);
+  const p1Yaku=checkYaku(G.p1Cap), p2Yaku=checkYaku(G.p2Cap);
+  const p1Base=scoreYaku(p1Yaku,G.p1Cap), p2Base=scoreYaku(p2Yaku,G.p2Cap);
+
+  // Oya-Ken: no yaku either side
+  if(p1Base===0&&p2Base===0&&!forcedWinner){
+    const oyaName=G.oya==='p1'?'You':'CPU';
+    if(G.oya==='p1') G.p2Score-=1; else G.p1Score+=1; // oya gains 1 = opponent loses 1
+    // Actually: oya gains 1 point so opponent's score decreases
+    roundHistory.push({round:G.round,winner:G.oya,winnerName:oyaName,yakuList:[],base:1,mult:1,earned:1,p1Score:G.p1Score,p2Score:G.p2Score,oyaKen:true});
+    renderHistory();
+    showRoundOverlay('Dealer\'s Privilege · 親権',
+      'No yaku scored — '+oyaName+' (dealer) gains 1 pt.\n\nYou: '+G.p1Score+' · CPU: '+G.p2Score,
+      nextBtnLabel(),()=>nextRound(G.oya,G.oya));
+    render(); return;
+  }
+
+  let winner=forcedWinner||(p1Base>0&&p2Base===0?'p1':p2Base>0&&p1Base===0?'p2':p1Base>=p2Base?'p1':'p2');
+  const loser=winner==='p1'?'p2':'p1';
+  const winBase=winner==='p1'?p1Base:p2Base;
+  const winnerCap=winner==='p1'?G.p1Cap:G.p2Cap;
+  const opponentKoiKoi=winner==='p1'?G.p2CalledKoiKoi:G.p1CalledKoiKoi;
+  let mult=1,notes=[];
+  if(winBase>=7){mult*=2;notes.push('7+ pts ×2');}
+  if(opponentKoiKoi){mult*=2;notes.push('Opponent called Koi-Koi ×2');}
+  const earned=winBase*mult;
+
+  // Deduct from loser's score
+  if(G.gameMode==='down'){G[loser+'Score']-=earned; G[winner+'Score']+=earned;} else {G[winner+'Score']+=earned;}
+
+  const winName=winner==='p1'?'You win':'CPU wins';
+  const yakuList=winner==='p1'?p1Yaku:p2Yaku;
+  // Record to history
+  roundHistory.push({
+    round:G.round, winner, winnerName:winName,
+    yakuList, base:winBase, mult, earned,
+    p1Score:G.p1Score, p2Score:G.p2Score,
+    oyaKen:false
+  });
+  renderHistory();
+  let body=winName+'!\nYaku: '+yakuList.join(', ')+'\nBase pts: '+winBase;
+  if(mult>1) body+='\nBonus: '+notes.join(' + ')+'\nTotal deducted: '+earned+' pts (×'+mult+')';
+  else body+='\nDeducted from opponent: '+earned+' pts';
+  body+='\n\nYou: '+G.p1Score+' pts · CPU: '+G.p2Score+' pts';
+
+  // Show stop banner, then overlay after it finishes
+  document.getElementById('stop-sub').textContent=earned+' pts deducted from opponent';
+  showStopBanner();
+  const bannerDelay=1900; // slightly after banner hides
+
+  // Check if game over
+  const gameOver=(G.gameMode==='down'&&(G.p1Score<=0||G.p2Score<=0))||G.round>=G.totalRounds;
+  setTimeout(()=>{
+    showRoundOverlay('Round '+G.round+' Over · 第'+G.round+'局終了', body, gameOver?'See Final Result':nextBtnLabel(), ()=>{
+      if(gameOver){endGame();}else{nextRound(winner,winner);}
+    });
+  },bannerDelay);
+  render();
+}
+
+function endGame(){
+  const tie=G.p1Score===G.p2Score;
+  const modeLabel=G.gameMode==='down'?'Count Down':'Count Up';
+  const w=G.p1Score>G.p2Score?'You win!':'CPU wins.';
+  const elapsed=sessionStats.startTime?Math.round((Date.now()-sessionStats.startTime)/60000):0;
+  const acc=sessionStats.cardsAnswered>0?Math.round(sessionStats.correctFirst/sessionStats.cardsAnswered*100):0;
+  let vocabLine='';
+  if(sessionStats.cardsAnswered>0){
+    vocabLine='\n\nVocab: '+sessionStats.cardsAnswered+' questions answered, '+acc+'% correct first try';
+    const extras=[];
+    if(sessionStats.hintsUsed>0) extras.push(sessionStats.hintsUsed+' hint'+(sessionStats.hintsUsed!==1?'s':''));
+    if(sessionStats.easyTapped>0) extras.push(sessionStats.easyTapped+' marked Easy');
+    if(sessionStats.hardTapped>0) extras.push(sessionStats.hardTapped+' marked Hard');
+    if(extras.length) vocabLine+='\n'+extras.join(' \xb7 ');
+    if(elapsed>0) vocabLine+='\nTime: '+elapsed+' min';
+  } else {
+    vocabLine='\n\nNo vocab questions this game.\nSelect a deck and set Q/card to 1+.';
+  }
+  showRoundOverlay('Game Over \xb7 \u30b2\u30fc\u30e0\u7d42\u4e86',
+    (tie?'Draw!':w)+'\n'+modeLabel+' \xb7 You: '+G.p1Score+' pts \xb7 CPU: '+G.p2Score+' pts'+vocabLine,
+    'New Game',newGame);
+  G.gameActive=false;
+  setNewGameBtn(true);
+  unlockGameSettings();
+}
+
+function nextBtnLabel(){return 'Next Round · 次の局へ';}
+function nextRound(newOya,lastWinner){
+  if((G.gameMode==='down'&&(G.p1Score<=0||G.p2Score<=0))||G.round>=G.totalRounds){endGame();return;}
+  startRound(newOya,newOya);
+}
+
+let _ovCb=null;
+function showRoundOverlay(title,body,btnText,cb){
+  document.getElementById('ov-title').textContent=title;
+  document.getElementById('ov-body').textContent=body;
+  document.getElementById('ov-btn').textContent=btnText;
+  _ovCb=cb; document.getElementById('round-overlay').classList.remove('hidden');
+}
+function closeOverlay(){
+  document.getElementById('round-overlay').classList.add('hidden');
+  if(_ovCb){_ovCb();_ovCb=null;}
+}
+
+// ── Koi-Koi / Stop ───────────────────────────────────────────────────────────
+document.getElementById('btn-koi').addEventListener('click',()=>{
+  G.p1CalledKoiKoi=true;
+  G.p1YakuSnapshot=[...checkYaku(G.p1Cap)];
+  setBtns(false); G.phase='select-hand'; G.turn='p2';
+  showKoiBanner();
+  log('Koi-Koi called! · こいこい！');
+  setPhase('Round '+G.round+'/'+G.totalRounds+' — CPU turn · 相手の番');
+  render(); setTimeout(cpuTurn,cpuSpeed);
+});
+document.getElementById('btn-stop').addEventListener('click',()=>{setBtns(false);endRound('p1');});
+document.getElementById('btn-new').addEventListener('click',newGame);
+
+// ── Config panel ─────────────────────────────────────────────────────────────
+function refreshConfigPanel(){
+  const qSel=document.getElementById('cp-q-field');
+  const aSel=document.getElementById('cp-a-field');
+  const info=document.getElementById('cp-deck-info');
+  // Rebuild field dropdowns from deckFieldNames
+  [qSel,aSel].forEach(sel=>{
+    const cur=sel.value;
+    sel.innerHTML='<option value="auto">Auto-detect</option>';
+    deckFieldNames.forEach((name,i)=>{
+      const opt=document.createElement('option');
+      opt.value=i; opt.textContent='['+i+'] '+name;
+      sel.appendChild(opt);
+    });
+    // Restore selection
+    sel.value=cur;
+    if(sel.value===''||sel.value==='auto') sel.value='auto';
+  });
+  // Set current saved values
+  qSel.value=fieldConfig.questionField!==null?String(fieldConfig.questionField):'auto';
+  aSel.value=fieldConfig.answerField!==null?String(fieldConfig.answerField):'auto';
+  document.getElementById('cp-pool-size').value=sessionPoolSize;
+  document.getElementById('cp-pool-label').textContent=sessionPoolSize+' cards';
+  document.getElementById('cp-focus').value=sessionFocus;
+  if(deckFieldNames.length===0){
+    info.textContent='No deck selected or field names not yet loaded.';
+  } else {
+    info.textContent='Deck has '+deckFieldNames.length+' fields: '+deckFieldNames.join(', ');
+  }
+  updateDetectedLabels();
+}
+
+function updateDetectedLabels(){
+  const {qIdx,aIdx}=autoDetectFields(deckFieldNames);
+  const qLabel=document.getElementById('cp-q-detected');
+  const aLabel=document.getElementById('cp-a-detected');
+  if(deckFieldNames.length===0){qLabel.textContent='';aLabel.textContent='';return;}
+  qLabel.textContent=qIdx!==null?'Auto would pick: ['+qIdx+'] '+deckFieldNames[qIdx]:'Auto: no suitable field found';
+  aLabel.textContent=aIdx!==null?'Auto would pick: ['+aIdx+'] '+deckFieldNames[aIdx]:'Auto: no suitable field found';
+}
+
+// ── Round history rendering ──────────────────────────────────────────────────
+function renderHistory(){
+  const el=document.getElementById('history-list');
+  if(!el) return;
+  if(roundHistory.length===0){
+    el.innerHTML='<div class="history-empty">No rounds played yet.</div>';
+    return;
+  }
+  el.innerHTML='';
+  // Show newest first
+  [...roundHistory].reverse().forEach(r=>{
+    const div=document.createElement('div');
+    const cls=r.oyaKen?'draw':r.winner==='p1'?'p1-win':'p2-win';
+    div.className='round-entry '+cls;
+    const yakuStr=r.yakuList.length?r.yakuList.join(', '):'—';
+    const multStr=r.mult>1?' (×'+r.mult+')':'';
+    div.innerHTML=`
+      <div class="re-header">
+        <span class="re-round">Round ${r.round}</span>
+        <span class="re-pts">${r.oyaKen?'Oya-Ken':'+'+r.earned+' pts'+multStr}</span>
+      </div>
+      <div class="re-winner">${r.oyaKen?r.winnerName+' keeps deal':'Winner: '+r.winnerName}</div>
+      ${r.yakuList.length?'<div class="re-yaku">'+yakuStr+'</div>':''}
+      <div class="re-score">Scores after: You ${r.p1Score} · CPU ${r.p2Score}</div>
+    `;
+    el.appendChild(div);
+  });
+}
+
+// ── Banners ───────────────────────────────────────────────────────────────────
+function showBanner(id,duration=1800){
+  const b=document.getElementById(id); b.classList.remove('hidden');
+  setTimeout(()=>b.classList.add('hidden'),duration);
+}
+function showKoiBanner(){showBanner('koi-banner',1800);}
+function showStopBanner(){showBanner('stop-banner',1800);}
+function showYakuBanner(yakuNames,pts){
+  const inner=document.getElementById('yaku-banner-inner');
+  inner.innerHTML=yakuNames.join(' + ')+'<span class="ban-sub">'+pts+' pts — Koi-Koi or Stop?</span>';
+  showBanner('yaku-banner',2200);
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────────
+initSettingsListeners();
+
+
+// ── Anki bridge ───────────────────────────────────────────────────────────────
+// ── QWebChannel init with retry ──────────────────────────────────────────────
+function initQWebChannel(){
+  if(typeof QWebChannel==='undefined'){
+    console.log('[Hanafuda] QWebChannel not available - browser mode');
+    const bstat=document.getElementById('bridge-status');
+    if(bstat){bstat.textContent='⬤ no bridge (browser)';bstat.style.color='var(--text3)';}
+    return;
+  }
+  if(typeof qt==='undefined'||!qt.webChannelTransport){
+    console.log('[Hanafuda] qt.webChannelTransport not ready, retrying...');
+    const bstat=document.getElementById('bridge-status');
+    if(bstat) bstat.textContent='⬤ waiting for Qt...';
+    setTimeout(initQWebChannel,100);
+    return;
+  }
+  console.log('[Hanafuda] Connecting to QWebChannel...');
+  try{
+    new QWebChannel(qt.webChannelTransport,function(channel){
+      console.log('[Hanafuda] QWebChannel connected. Objects:',Object.keys(channel.objects));
+      window.ankiBridge=channel.objects.ankiBridge;
+      if(!window.ankiBridge){
+        console.error('[Hanafuda] ankiBridge not found in channel objects!');
+        const bstat=document.getElementById('bridge-status');
+        if(bstat){bstat.textContent='⬤ bridge error';bstat.style.color='var(--red)';}
+        return;
+      }
+      console.log('[Hanafuda] ankiBridge found, connecting signals...');
+      const bstat=document.getElementById('bridge-status');
+      if(bstat){bstat.textContent='⬤ Anki connected';bstat.style.color='var(--accent)';}
+      window.ankiBridge.challengeReady.connect(_onChallengeReady);
+
+      window.ankiBridge.answerRecorded.connect(function(ok){
+        if(!ok) console.warn('[Hanafuda] Anki answer recording failed');
+      });
+      window.ankiBridge.fieldsReady.connect(function(jsonStr){
+        try{
+          const data=JSON.parse(jsonStr);
+          deckFieldNames=data.fields||[];
+          // Clamp pool slider to deck size
+          if(data.deck_size&&data.deck_size>0){
+            const slider=document.getElementById('cp-pool-size');
+            if(slider){
+              const cap=Math.max(5,data.deck_size);
+              slider.max=cap;
+              if(+slider.value>cap){
+                slider.value=cap; sessionPoolSize=cap;
+                document.getElementById('cp-pool-label').textContent=cap+' cards';
+              }
+            }
+          }
+          // Always reset to auto-detect when deck changes
+          fieldConfig={questionField:null,answerField:null};
+          const {qIdx,aIdx}=autoDetectFields(deckFieldNames);
+          window.ankiBridge.setFieldConfig(qIdx??-1,aIdx??-1);
+          // Reset UI selectors to auto
+          const qSel=document.getElementById('cp-q-field');
+          const aSel=document.getElementById('cp-a-field');
+          if(qSel) qSel.value='auto';
+          if(aSel) aSel.value='auto';
+          updateDetectedLabels();
+          // Clamp pool slider to deck size when we know it
+          // (deck size comes separately via a new signal, so just cap display for now)
+        }catch(e){console.error('[Hanafuda] fieldsReady parse error:',e);}
+      });
+
+      window.ankiBridge.requestDecks();
+      console.log('[Hanafuda] Bridge ready!');
+    });
+  }catch(e){
+    console.error('[Hanafuda] QWebChannel init error:',e);
+  }
+}
+// Start trying after a short delay to let Qt inject the transport
+setTimeout(initQWebChannel,200);
+</script>
+
+</body>
+</html>

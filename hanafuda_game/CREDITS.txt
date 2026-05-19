@@ -1,0 +1,33 @@
+Hanafuda Koi-Koi — Anki Add-on
+================================
+
+AUTHOR
+------
+Z.J. Rubin
+
+HANAFUDA CARD IMAGES
+---------------------
+The 48 Hanafuda card SVG images included in this add-on were created by
+Louie Mantia and sourced from Wikimedia Commons.
+
+  Author:  Louie Mantia (https://commons.wikimedia.org/wiki/User:Louiemantia)
+  License: Creative Commons Attribution-Share Alike 4.0 International (CC BY-SA 4.0)
+           https://creativecommons.org/licenses/by-sa/4.0/
+
+In accordance with the CC BY-SA 4.0 license, this add-on is also distributed
+under the Creative Commons Attribution-Share Alike 4.0 International license.
+
+You are free to share and adapt this add-on provided you give appropriate
+credit and distribute any derivatives under the same license.
+
+
+QWEBCHANNEL.JS
+--------------
+The file web/qwebchannel.js is part of the Qt Framework.
+
+  Copyright (C) The Qt Company Ltd.
+  License: GNU Lesser General Public License v3 / Qt Commercial License
+           https://www.qt.io/licensing/
+
+This file is included for compatibility purposes as permitted by Qt's
+licensing terms for use within Qt-based applications.

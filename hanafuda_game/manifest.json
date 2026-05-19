@@ -1,0 +1,11 @@
+{
+  "name": "Hanafuda Koi-Koi",
+  "package": "hanafuda_game",
+  "author": "Z.J. Rubin",
+  "description": "Play Koi-Koi Hanafuda with vocab challenges drawn from your Anki decks. Gate every card capture behind a multiple-choice question from your own vocabulary deck. Features full Koi-Koi rules, six visual themes, session tracking, and Anki scheduling integration.",
+  "homepage": "",
+  "tags": "game japanese hanafuda vocabulary",
+  "license": "CC BY-SA 4.0",
+  "min_point_version": 231000,
+  "conflicts": []
+}
